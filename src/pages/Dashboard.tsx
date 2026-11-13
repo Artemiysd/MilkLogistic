@@ -1,6 +1,7 @@
 import { useState} from "react";
 import { deliveryPoints, vehicles,depot } from "../data/mockData.ts";
 import "./Dashboard.css";
+import RouteInfo from "../components/RouteInfo";
 import LogisticsMap from "../components/LogisticsMap";
 function Dashboard() {
     const totalDemand = deliveryPoints.reduce(
@@ -8,6 +9,7 @@ function Dashboard() {
         0
     );
     const [isOptimized, setIsOptimized] = useState(false);
+    const [mapMode, setMapMode] = useState<"points" | "routes">("points");
     const totalVehicles = vehicles.reduce(
         (sum,vehicle) => sum+ vehicle.count,0
     );
@@ -46,11 +48,40 @@ function Dashboard() {
                     </button>
                 </aside>
                 <section className ="map-container">
-                   <LogisticsMap points={deliveryPoints} depot ={depot} />
+                    <div className="map-controls">
+                        <button
+                            className={mapMode === "points" ? "active" : ""}
+                            onClick={() => setMapMode("points")}
+                        >
+                            Все точки
+                        </button>
+                        <button
+                            className={mapMode === "routes" ? "active" : ""}
+                            onClick={() => setMapMode("routes")}
+                        >
+                            Маршруты
+                        </button>
+                    </div>
+                    {mapMode === "points" ? (
+                        <LogisticsMap points={deliveryPoints} depot={depot} />
+                    ) : (
+                        <div className="routes-placeholder">
+                            <h3>Маршруты ещё не построены</h3>
+                            <p>Ожидаем результат алгоритма оптимизации</p>
+                        </div>
+                    )}
+
                 </section>
             </div>
             <section className="results">
                 <h2>Результат оптимизации</h2>
+                <RouteInfo
+                    vehicle="Грузовик 5т"
+                    points={ 12}
+                    load ={ 4320}
+                    capacity={ 5000}
+                    distance={ 38}
+                    time="1ч 15 мин" />
                 <div className="results-grid">
                     <div className = "result-card">
                         <p>До оптимизации</p>

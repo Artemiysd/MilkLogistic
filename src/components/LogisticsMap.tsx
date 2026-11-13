@@ -20,8 +20,7 @@ function LogisticsMap({points,depot}: LogisticsMapProps){
         <MapContainer
             center={position}
             zoom={12}
-            style={{height: "100%", width: "100%"}}
-        >
+            style={{height: "500px", width: "100%"}}        >
             <RemoveLeafletPrefix />
 
             <TileLayer
