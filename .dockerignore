@@ -1,0 +1,22 @@
+.git
+.gitignore
+node_modules
+dist
+build
+__pycache__
+*.pyc
+.venv
+venv
+
+.env
+.env.*
+!.env.example
+
+backend
+schema.json
+docker-compose*.yml
+*.md
+infra/preflight.ps1
+
+# большие и ненужные в образах данные OSRM
+infra/osrm/data

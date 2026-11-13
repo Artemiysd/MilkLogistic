@@ -1,0 +1,189 @@
+# Инфраструктура MilkLogistic
+
+Здесь только инфраструктура и геослой: Docker, nginx, сервис маршрутизации,
+сборка матрицы расстояний, подготовка OSRM. Бизнес-логики (распределение точек,
+порядок объезда, экономика) тут нет.
+
+## Раскладка
+
+```
+.
+├── docker-compose.yml            # db + api + routing + web (+ osrm, matrix в профилях)
+├── docker-compose.backend.yml    # наложение: подменяет api на backend/
+├── .env.example                  # копируется в .env
+├── schema.json                   # контракт данных (1С ↔ бэкенд ↔ фронтенд)
+├── data/
+│   ├── logistics_data.json       # 214 точек, 16 машин, ограничения
+│   ├── geocode_overrides.json    # ручные правки координат
+│   └── matrix_cache.json         # матрица 215×215 по дорогам (собирается один раз)
+├── services/
+│   └── routing/                  # СЕРВИС МАРШРУТИЗАЦИИ: координаты -> OSRM
+├── backend/
+│   └── Dockerfile                # образ для команды бэкенда
+├── infra/
+│   ├── mock-api/                 # заглушка API по контракту (без зависимостей)
+│   ├── matrix/                   # сборка и отчёт по матрице
+│   ├── nginx/templates/          # nginx + проксирование /api
+│   ├── web/Dockerfile            # сборка Vite → nginx
+│   ├── osrm/prepare.ps1          # нарезка Гродно из OSM для своего OSRM
+│   └── preflight.ps1             # проверка окружения перед демо
+└── src/, index.html, package.json  # фронтенд из ветки frontend
+```
+
+## Сервисы и порты
+
+| Сервис | Порт | Что делает | Зависит от |
+|---|---|---|---|
+| `web` | 8080 | отдаёт фронтенд, проксирует `/api` | `api` |
+| `api` | 8000 | заглушка по контракту (позже — бэкенд команды) | — |
+| `routing` | 8100 | **координаты → OSRM → расстояния, время, геометрия** | OSRM |
+| `db` | 5432 | Postgres для бэкенда | — |
+| `osrm` | 5000 | свой OSRM (профиль `geo`) | подготовленные данные |
+| `matrix` | — | разовая сборка матрицы (профиль `tools`) | OSRM |
+
+## Быстрый старт
+
+```powershell
+Copy-Item .env.example .env -Force
+docker compose up -d --build
+```
+
+| Что | Адрес |
+|---|---|
+| Интерфейс | http://localhost:8080 |
+| API | http://localhost:8000/api/health |
+| Маршрутизация | http://localhost:8100/api/health |
+| Swagger маршрутизации | http://localhost:8100/docs |
+
+Проверка связки:
+
+```powershell
+curl http://localhost:8100/api/health          # routing -> OSRM
+curl http://localhost:8000/api/data            # точки и машины
+curl http://localhost:8080/api/health          # то же через nginx
+```
+
+## Сервис маршрутизации — мой компонент
+
+Полное описание: [`services/routing/README.md`](services/routing/README.md).
+
+```
+POST /api/calculate-route   порядок точек -> distance_m, duration_s, legs, geometry
+POST /api/calculate-table   матрица N×N расстояний и времени
+GET  /api/health            живость сервиса и OSRM
+```
+
+Что уже проверено на реальных данных (215 точек, включая склад):
+
+| Проверка | Результат |
+|---|---|
+| Маршрут по всем 214 точкам (3 запроса к OSRM, нарезка по 100) | 654.42 км, 1105 мин |
+| Сумма участков против матрицы | расхождение **0.000 м** на всех 214 плечах |
+| Матрица 215×215 (9 запросов) | совпадает с `data/matrix_cache.json` до 0.000 м |
+| Повторный запрос | из кэша, 0 мс |
+| Ошибки | 422 при <2 точках и неверных координатах, 413 при >300 точках, 504 если OSRM недоступен |
+
+Ключевая находка: OSRM по умолчанию считает с `continue_straight=true`, из-за чего сумма
+участков расходилась с матрицей на 15.9 км. Сервис явно передаёт `continue_straight=false`,
+поэтому цифры у алгоритма и в интерфейсе совпадают.
+
+## Матрица расстояний
+
+Собирается один раз, дальше всё считается без сети.
+
+```powershell
+py infra/matrix/build_matrix.py            # 9 запросов к OSRM, ~8 с
+py infra/matrix/report.py                  # отчёт по готовой матрице
+py infra/matrix/build_matrix.py --verify   # сверка ячеек через /route
+py infra/matrix/build_matrix.py --provider haversine   # офлайн-заглушка
+```
+
+Или в контейнере, без Python на хосте:
+
+```powershell
+docker compose run --rm matrix
+docker compose run --rm matrix --verify
+```
+
+Что получилось на реальных данных (матрица пересобрана с локального OSRM):
+
+| Метрика | Значение |
+|---|---|
+| Размер | 215 × 215 (46 225 ячеек), файл 0.65 МБ, 9 запросов, 5 с |
+| Расстояния | медиана 6.0 км, 90% 10.6 км, максимум 19.6 км |
+| Время в пути | медиана 9 мин, максимум 27 мин |
+| От склада | медиана 5.83 км, максимум 14.53 км, сумма по всем точкам 1335 км |
+| Одинаковые координаты | 19 адресов, где стоят 2–4 организации (0 м между ними) |
+| Асимметрия | медиана 3.1%, максимум 76.3%, 873 пары различаются больше чем на 20% |
+
+**Что за чем в матрице.** Строка `0` — склад (Гаспадарчая 28), ячейка `[0][j]` — расстояние
+от склада до точки `j`. Остальные ячейки — точка↔точка. Только «склад → точка» недостаточно:
+алгоритму нужно знать, сколько ехать между двумя магазинами, иначе порядок объезда не построить.
+
+**Почему пересобирать после смены OSRM.** Публичный demo-сервер и свой контейнер используют
+разные снимки OSM: в среднем расхождение 7 м на ячейку, максимум 2.5 км на одной точке
+(там поменялась дорожная сеть). Если матрица собрана на одном OSRM, а маршрут считается
+на другом — цифры в интерфейсе и у алгоритма не сойдутся.
+
+```powershell
+# пересобрать с локального OSRM (после смены OSRM_BASE_URL)
+docker compose --profile tools run --rm matrix --base-url http://osrm:5000
+```
+
+Выводы для алгоритма: матрица **несимметрична** (односторонние улицы), солвер должен
+работать с направленными рёбрами; одинаковые координаты дают 0 м, но выгрузка на каждую
+организацию считается отдельно.
+
+## Подключение реального бэкенда
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.backend.yml up -d --build
+```
+
+Compose, nginx и адреса не меняются — заменяется только образ `api`.
+Требования к бэкенду перечислены в `backend/Dockerfile`.
+
+## Свой OSRM
+
+```powershell
+.\infra\osrm\prepare.ps1          # скачает Беларусь и нарежет bbox Гродно
+docker compose --profile geo up -d
+# в .env: OSRM_BASE_URL=http://osrm:5000
+docker compose up -d routing
+```
+
+## Проверка перед демо
+
+```powershell
+.\infra\preflight.ps1        # окружение: docker, порты, данные, API, OSRM
+.\infra\osrm\verify.ps1 -Full # свой OSRM + сверка маршрута с матрицей на всех 215 точках
+```
+
+`verify.ps1` проверяет: OSRM отвечает, таблица больше 100 точек считается (флаг
+`--max-table-size`), сервис маршрутизации смотрит на свой OSRM, маршрут по всем точкам
+совпадает с матрицей.
+
+## Демо без интернета
+
+```powershell
+docker compose build
+docker save -o milk-images.tar milklogistic-api milklogistic-web milklogistic-routing postgres:16-alpine nginx:1.27-alpine python:3.12-alpine
+# на площадке:
+docker load -i milk-images.tar
+docker compose up -d
+```
+
+Карта без интернета не откроется: тайлы OSM грузятся из сети. Либо локальный тайл-сервер,
+либо заранее сделанные скриншоты.
+
+## Частые проблемы
+
+| Симптом | Причина |
+|---|---|
+| `docker: команда не найдена` | Docker Desktop не добавил себя в PATH — перезапустите терминал или добавьте `C:\Users\<user>\AppData\Local\Programs\DockerDesktop\resources\bin` в PATH |
+| `error getting credentials ... docker-credential-desktop not found` | та же причина: docker.exe не в PATH, credential helper не находится |
+| `port is already allocated` | занят 8080/8000/8100/5432 — поменяйте `*_PORT` в `.env` |
+| `502 Bad Gateway` на `/api` | сервис `api` не прошёл healthcheck: `docker compose logs api` |
+| `routing` в статусе `degraded` | OSRM недоступен: проверьте `OSRM_BASE_URL`, интернет или свой OSRM |
+| `web` падает на `npm ci` | нет `package-lock.json` в корне или фронтенд не в корне |
+| `no such service: osrm` | сервис под профилем: добавьте `--profile geo` |

@@ -1,0 +1,127 @@
+.dashboard {
+    min-height: 100vh;
+    background: #f5f7f6;
+    color:#1f2933;
+    font-family: Arial, sans-serif;
+}
+.header {
+    background:white;
+    padding: 20px 40px;
+    border-bottom: 1px solid #e5e7eb;
+
+}
+.header h1 {
+    margin: 0;
+    font-size: 28px;
+    color: #1d4ed8;
+}
+.header p{
+    margin: 5px 0 0;
+    color: #1d4ed8;
+}
+.dashboard-content{
+    display:grid;
+    grid-template-columns: 300px 1fr;
+    gap:20px;
+    padding:25px 40px;
+}
+.sidebar{
+    background:white;
+    border-radius:12px;
+    padding:20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.sidebar h2{
+    margin-top: 0;
+    color:#1d4ed8;
+}
+.info-card{
+    display:flex;
+    align-items: center;
+    gap:15px;
+    padding:15px 0;
+    border-bottom: 1px solid #eee;
+}
+.info-card span{
+    font-size:28px;
+}
+.info-card strong{
+    font-size:40px;
+}
+.info-card p{
+    margin: 3px 0 0;
+    color: #1d4ed8;
+    font-size: 20px;
+
+}
+.optimize-button{
+    width:100%;
+    margin-top: 25px;
+    padding:14px;
+    border:none;
+    border-radius:8px;
+    background: #2563eb;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+}
+.optimize-button:hover{
+    background: #1d4ed8;
+}
+.map-container{
+    background:white;
+    border-radius: 12px;
+    min-height: 450px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.005);
+}
+/*.map-placeholder{*/
+/*    height:100%;*/
+/*    min-height:450px;*/
+/*    display:flex;*/
+/*    flex-direction: column;*/
+/*    align-items: center;*/
+/*    justify-content: center;*/
+/*    color: #6b7280;*/
+/*    text-align: center;*/
+/*}*/
+/*.map-placeholder span{*/
+/*    font-size:40px;*/
+/*}*/
+/*.map-placeholder p{*/
+/*    color: #1d4ed8;*/
+/*    font-size:20px;*/
+/*}*/
+/*.map-placeholder h2{*/
+/*    color: #1d4ed8;*/
+/*}*/
+.results{
+    margin: 0 40px 40px;
+    background: white;
+    padding: 25px;
+    border-radius:12px;
+}
+.results h2{
+    margin-top: 0;
+    color: #1d4ed8;
+}
+.results-grid{
+    display: grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:20px;
+}
+.results-card{
+    background: #f8fafc;
+    padding: 20px;
+    border-radius: 10px;
+}
+.result-card p{
+    margin: 0 0 10px;
+    color: #1d4ed8;
+    font-size: 20px;
+}
+.result-card strong{
+    font-size:40px;
+}
+.savings{
+    background: #ecfdf5;
+}

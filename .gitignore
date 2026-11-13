@@ -1,0 +1,23 @@
+# зависимости и сборка
+node_modules/
+dist/
+build/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# секреты и локальные настройки
+.env
+.env.local
+*.local
+
+# данные, которые не коммитим
+infra/osrm/data/
+data/runs/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
