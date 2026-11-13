@@ -1,4 +1,4 @@
-import {MapContainer,TileLayer,Marker,Popup,useMap} from "react-leaflet";
+import {MapContainer,TileLayer,Marker,Popup,CircleMarker,useMap} from "react-leaflet";
 import type { DeliveryPoint} from "../types/logistics"
 
 function RemoveLeafletPrefix(){
@@ -25,9 +25,10 @@ function LogisticsMap({points}: LogisticsMapProps){
             />
             <Marker position={position}><Popup>Главный склад</Popup> </Marker>
             {points.map((point) => (
-                <Marker
+                <CircleMarker
                     key={point.id}
-                    position={[point.latitude,point.longitude]}
+                    center={[point.latitude,point.longitude]}
+                    radius={4}
                 >
                     <Popup>
                         <strong>{point.name}</strong>
@@ -36,7 +37,7 @@ function LogisticsMap({points}: LogisticsMapProps){
                         <br />
                         Заказ: {point.demand} кг
                     </Popup>
-                </Marker>
+                </CircleMarker>
                 ))}
         </MapContainer>
         );
