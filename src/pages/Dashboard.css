@@ -103,6 +103,35 @@
     background: #2563eb;
     color: white;
 }
+.map-search {
+    width: 100%;
+    margin-bottom: 12px;
+    box-sizing: border-box;
+}
+.map-search input {
+    width: 100%;
+    padding: 12px 15px;
+    border: 1px solid #2563eb;
+    background: #2563eb;
+    border-radius: 8px;
+    font-size: 15px;
+    outline: none;
+    color: white;
+    box-sizing: border-box;
+    transition: border-color 0.2s;
+}
+.map-search input:focus {
+    background: #1d4ed8;
+    border-color: #1d4ed8;
+
+}
+.map-search input::placeholder {
+    color: #dbeafe;
+}
+.map-search input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
 .route-info {
     margin: 20px 0;
 }

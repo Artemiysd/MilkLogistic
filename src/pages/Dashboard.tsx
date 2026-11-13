@@ -10,6 +10,11 @@ function Dashboard() {
     );
     const [isOptimized, setIsOptimized] = useState(false);
     const [mapMode, setMapMode] = useState<"points" | "routes">("points");
+    const [searchQuery,setSearchQuery] = useState("");
+    const filteredPoints= deliveryPoints.filter((point) =>
+        point.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        point.address.toLowerCase().includes(searchQuery.toLowerCase())
+    );
     const totalVehicles = vehicles.reduce(
         (sum,vehicle) => sum+ vehicle.count,0
     );
@@ -48,6 +53,19 @@ function Dashboard() {
                     </button>
                 </aside>
                 <section className ="map-container">
+                    <div className="map-search">
+                        <input
+                            type="text"
+                            placeholder={
+                                mapMode === "points"
+                                    ? "Поиск по названию или адресу..."
+                                    : "Поиск по маршрутам..."
+                            }
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            disabled={mapMode === "routes"}
+                        />
+                    </div>
                     <div className="map-controls">
                         <button
                             className={mapMode === "points" ? "active" : ""}
@@ -63,7 +81,7 @@ function Dashboard() {
                         </button>
                     </div>
                     {mapMode === "points" ? (
-                        <LogisticsMap points={deliveryPoints} depot={depot} />
+                        <LogisticsMap points={filteredPoints} depot={depot} />
                     ) : (
                         <div className="routes-placeholder">
                             <h3>Маршруты ещё не построены</h3>
