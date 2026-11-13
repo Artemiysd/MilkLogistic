@@ -1,4 +1,6 @@
-import data from "./logisticsData.json";
+// Единственный источник данных: data/logistics_data.json в корне репозитория.
+// Копия в src/data удалена, чтобы данные не расходились между фронтом и бэкендом.
+import data from "../../data/logistics_data.json";
 export const deliveryPoints = data.delivery_points
     .filter((point) => point.coords !== null)
     .map((point) => ({
