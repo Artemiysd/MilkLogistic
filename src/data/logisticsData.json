@@ -4,8 +4,8 @@
     "id": "depot_1",
     "address": "Гродно, Гаспадарчая 28",
     "coords": {
-      "lat": 53.6667,
-      "lon": 23.8333
+      "lat": 53.708928,
+      "lon": 23.828288
     }
   },
   "vehicles": [
@@ -564,7 +564,10 @@
       "street": "Лиможе",
       "demand": 630.0,
       "delivery_window": "9-00",
-      "coords": null
+      "coords": {
+        "lat": 53.704664,
+        "lon": 23.848250
+      }
     },
     {
       "id": "point_44",

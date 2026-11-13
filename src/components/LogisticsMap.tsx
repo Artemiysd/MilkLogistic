@@ -8,9 +8,14 @@ function RemoveLeafletPrefix(){
 }
 interface LogisticsMapProps {
     points: DeliveryPoint[];
+    depot: Depot;
 }
-function LogisticsMap({points}: LogisticsMapProps){
-    const position: [number, number] = [53.6694,23.8131];
+interface Depot{
+    latitude: number;
+    longitude: number;
+}
+function LogisticsMap({points,depot}: LogisticsMapProps){
+    const position: [number, number] =[depot.latitude, depot.longitude,];
     return (
         <MapContainer
             center={position}

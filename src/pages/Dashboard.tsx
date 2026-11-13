@@ -1,5 +1,5 @@
 import { useState} from "react";
-import { deliveryPoints, vehicles } from "../data/mockData.ts";
+import { deliveryPoints, vehicles,depot } from "../data/mockData.ts";
 import "./Dashboard.css";
 import LogisticsMap from "../components/LogisticsMap";
 function Dashboard() {
@@ -8,6 +8,9 @@ function Dashboard() {
         0
     );
     const [isOptimized, setIsOptimized] = useState(false);
+    const totalVehicles = vehicles.reduce(
+        (sum,vehicle) => sum+ vehicle.count,0
+    );
     return (
         <main className="dashboard">
             <header className="header">
@@ -27,7 +30,7 @@ function Dashboard() {
                     </div>
                     <div className="info-card">
                         <div>
-                            <strong>{vehicles.length}</strong>
+                            <strong>{totalVehicles}</strong>
                             <p>Транспорта</p>
                         </div>
                     </div>
@@ -43,7 +46,7 @@ function Dashboard() {
                     </button>
                 </aside>
                 <section className ="map-container">
-                   <LogisticsMap points={deliveryPoints} />
+                   <LogisticsMap points={deliveryPoints} depot ={depot} />
                 </section>
             </div>
             <section className="results">
