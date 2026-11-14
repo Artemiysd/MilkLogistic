@@ -1,9 +1,10 @@
 ﻿<#
   Запуск MilkLogistic одной командой.
 
-    .\start.ps1              # поднять стек: web + api(заглушка) + routing + db
+    .\start.ps1              # реальный бэкенд + routing + db (+ OSRM, если данные готовы)
     .\start.ps1 -Build       # то же, но пересобрать образы (после правок кода)
-    .\start.ps1 -Osrm        # дополнительно поднять свой OSRM (нужен prepare.ps1)
+    .\start.ps1 -Mock        # вместо бэкенда поднять заглушку API
+    .\start.ps1 -Osrm        # принудительно поднять свой OSRM
     .\stop.ps1               # остановить всё
 
   Запускать из PowerShell. Права администратора не нужны.
@@ -12,6 +13,7 @@
 param(
     [switch]$Build,
     [switch]$Osrm,
+    [switch]$Mock,
     [switch]$NoBrowser
 )
 
@@ -72,17 +74,23 @@ if (-not (Test-Path ".env")) {
 
 # ---------------------------------------------------------------- 2. compose
 
-if ($Osrm) {
-    if (-not (Test-Path "infra/osrm/data/grodno.osrm")) {
-        Fail "Нет данных OSRM. Сначала: .\infra\osrm\prepare.ps1"
-        exit 1
-    }
-    Step "Поднимаю стек вместе со своим OSRM"
-    if ($Build) { & $dockerExe compose --profile geo up -d --build } else { & $dockerExe compose --profile geo up -d }
-} else {
-    Step "Поднимаю стек"
-    if ($Build) { & $dockerExe compose up -d --build } else { & $dockerExe compose up -d }
+$composeArgs = @("-f", "docker-compose.yml")
+if (-not $Mock) { $composeArgs += @("-f", "docker-compose.backend.yml") }
+
+$osrmReady = Test-Path "infra/osrm/data/grodno.osrm"
+if ($Osrm -and -not $osrmReady) {
+    Fail "Нет данных OSRM. Сначала: .\infra\osrm\prepare.ps1"
+    exit 1
 }
+if ($osrmReady) { $composeArgs += @("--profile", "geo") }
+
+if ($Mock) { Step "Поднимаю стек с заглушкой API" }
+elseif ($osrmReady) { Step "Поднимаю стек: реальный бэкенд + свой OSRM" }
+else { Step "Поднимаю стек: реальный бэкенд (OSRM не подготовлен)" }
+
+$upArgs = $composeArgs + @("up", "-d")
+if ($Build) { $upArgs += "--build" }
+& $dockerExe compose @upArgs
 if ($LASTEXITCODE -ne 0) { Fail "docker compose завершился с ошибкой. Смотри вывод выше."; exit 1 }
 
 # ---------------------------------------------------------------- 3. ожидание
@@ -109,10 +117,10 @@ if ($routing) { Ok "сервис маршрутизации отвечает" } 
 
 Step "Готово"
 Write-Host ""
-Write-Host "   Интерфейс .............. http://localhost:8080"
-Write-Host "   API .................... http://localhost:8000/api/health"
-Write-Host "   Маршрутизация .......... http://localhost:8100/api/health"
-Write-Host "   Swagger маршрутизации .. http://localhost:8100/docs"
+Write-Host "   Проверка расчётов ....... http://localhost:8000/   <- карта и цифры"
+Write-Host "   API ..................... http://localhost:8000/docs"
+Write-Host "   Интерфейс (фронтенд) .... http://localhost:8080"
+Write-Host "   Маршрутизация ........... http://localhost:8100/api/health"
 Write-Host ""
 
 try {
@@ -130,4 +138,4 @@ try {
 
 Write-Host "   Проверка целиком: .\infra\preflight.ps1" -ForegroundColor DarkGray
 Write-Host "   Остановить:       .\stop.ps1" -ForegroundColor DarkGray
-if (-not $NoBrowser) { Start-Process "http://localhost:8080" }
+if (-not $NoBrowser) { Start-Process "http://localhost:8000/" }
