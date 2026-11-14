@@ -1,15 +1,6 @@
 import { useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Popup, CircleMarker, Polyline, Tooltip, useMap } from "react-leaflet";
-
-export interface MapPoint {
-    id: string;
-    name: string;
-    address: string;
-    demand: number;
-    latitude: number;
-    longitude: number;
-    color?: string;
-}
+import type { DeliveryPoint } from "../types/logistics";
 
 export interface MapRoute {
     number: number;
@@ -18,20 +9,13 @@ export interface MapRoute {
     positions: [number, number][];
 }
 
-interface LogisticsMapProps {
-    points: MapPoint[];
-    depot: { latitude: number; longitude: number };
-    routes?: MapRoute[];
-    selectedRoute?: number | null;
-}
-
 function RemoveLeafletPrefix() {
     const map = useMap();
     map.attributionControl.setPrefix(false);
     return null;
 }
 
-function FitBounds({ points, routes }: { points: MapPoint[]; routes: MapRoute[] }) {
+function FitBounds({ points, routes }: { points: DeliveryPoint[]; routes: MapRoute[] }) {
     const map = useMap();
 
     useEffect(() => {
@@ -47,9 +31,19 @@ function FitBounds({ points, routes }: { points: MapPoint[]; routes: MapRoute[] 
     return null;
 }
 
+interface LogisticsMapProps {
+    points: DeliveryPoint[];
+    depot: Depot;
+    routes?: MapRoute[];
+    selectedRoute?: number | null;
+}
+interface Depot {
+    latitude: number;
+    longitude: number;
+}
+
 function LogisticsMap({ points, depot, routes = [], selectedRoute = null }: LogisticsMapProps) {
     const position: [number, number] = [depot.latitude, depot.longitude];
-
     return (
         <MapContainer center={position} zoom={12} style={{ height: "500px", width: "100%" }}>
             <RemoveLeafletPrefix />
@@ -59,12 +53,7 @@ function LogisticsMap({ points, depot, routes = [], selectedRoute = null }: Logi
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 attribution="@ OpenStreetMap contributors"
             />
-
-            <Marker position={position}>
-                <Popup>
-                    <strong>Склад</strong>
-                </Popup>
-            </Marker>
+            <Marker position={position}><Popup>Главный склад</Popup> </Marker>
 
             {routes.map((route) => {
                 const dimmed = selectedRoute !== null && selectedRoute !== route.number;
@@ -88,12 +77,6 @@ function LogisticsMap({ points, depot, routes = [], selectedRoute = null }: Logi
                     key={point.id}
                     center={[point.latitude, point.longitude]}
                     radius={4}
-                    pathOptions={{
-                        color: point.color ?? "#2563eb",
-                        fillColor: point.color ?? "#2563eb",
-                        fillOpacity: 0.85,
-                        weight: 1,
-                    }}
                 >
                     <Popup>
                         <strong>{point.name}</strong>
@@ -107,5 +90,4 @@ function LogisticsMap({ points, depot, routes = [], selectedRoute = null }: Logi
         </MapContainer>
     );
 }
-
 export default LogisticsMap;
