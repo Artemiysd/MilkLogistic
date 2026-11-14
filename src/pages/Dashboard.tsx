@@ -84,6 +84,20 @@ function Dashboard() {
         if (!result || selectedRoute === null) return null;
         return result.routes.find((route) => route.route_number === selectedRoute) ?? null;
     }, [result, selectedRoute]);
+    const selectedRoutePoints = useMemo(() => {
+        if (!activeRoute) return [];
+
+        return activeRoute.stops
+            .filter((stop) => stop.coords !== null)
+            .map((stop, index) => ({
+                id: stop.point_id ?? `route-${activeRoute.route_number}-stop-${index}`,
+                name: stop.address,
+                address: stop.street || stop.address,
+                demand: stop.demand_kg,
+                latitude: stop.coords!.lat,
+                longitude: stop.coords!.lon,
+            }));
+    }, [activeRoute]);
 
     async function runOptimize() {
         setLoading(true);
@@ -172,11 +186,14 @@ function Dashboard() {
                         </button>
                     </div>
                     {mapMode === "points" ? (
-                        <LogisticsMap points={filteredPoints} depot={depotPoint} />
+                        <LogisticsMap
+                            points={filteredPoints}
+                            depot={depotPoint}
+                        />
                     ) : mapRoutes.length > 0 ? (
                         <>
                             <LogisticsMap
-                                points={points}
+                                points={selectedRoutePoints}
                                 depot={depotPoint}
                                 routes={mapRoutes}
                                 selectedRoute={selectedRoute}
@@ -240,5 +257,4 @@ function Dashboard() {
             </section>
         </main>
     );
-}
-export default Dashboard;
+}export default Dashboard;
