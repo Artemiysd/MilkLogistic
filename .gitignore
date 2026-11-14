@@ -27,6 +27,10 @@ infra/osrm/data/
 data/runs/
 data/exports/
 
+# рабочие файлы планировщика
+logs/
+output/
+
 # архивы образов для офлайн-демо (docker save)
 *.tar
 *.tar.gz
