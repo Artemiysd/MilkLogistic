@@ -45,8 +45,18 @@ $env:PATH = "$(Split-Path $dockerExe);$env:PATH"
 Ok "docker: $(& $dockerExe --version)"
 
 Step "Проверяю, запущен ли Docker Desktop"
-& $dockerExe info 2>$null | Out-Null
-if ($LASTEXITCODE -ne 0) {
+function Test-DockerUp {
+    # docker info пишет ошибку в stderr, а при ErrorActionPreference=Stop
+    # PowerShell 5.1 считает это исключением. Поэтому глушим на время вызова.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & $dockerExe info 1>$null 2>$null
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $previous
+    return ($code -eq 0)
+}
+
+if (-not (Test-DockerUp)) {
     $desktop = @(
         "$env:LOCALAPPDATA\Programs\DockerDesktop\Docker Desktop.exe",
         "C:\Program Files\Docker\Docker\Docker Desktop.exe"
@@ -59,8 +69,7 @@ if ($LASTEXITCODE -ne 0) {
     $ready = $false
     for ($i = 0; $i -lt 50; $i++) {
         Start-Sleep -Seconds 3
-        & $dockerExe info 2>$null | Out-Null
-        if ($LASTEXITCODE -eq 0) { $ready = $true; break }
+        if (Test-DockerUp) { $ready = $true; break }
         Write-Host "." -NoNewline
     }
     if (-not $ready) { Fail "Docker Desktop не поднялся за 2.5 минуты. Открой его вручную и запусти скрипт снова."; exit 1 }
