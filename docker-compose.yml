@@ -85,9 +85,8 @@ services:
       API_UPSTREAM: ${API_UPSTREAM:-api:8000}
     ports:
       - "${WEB_PORT:-8080}:80"
-    depends_on:
-      api:
-        condition: service_healthy
+    # без depends_on: иначе `docker compose up -d web` пересоздаёт api
+    # по базовому файлу (заглушка, read-only /data). nginx дождётся api сам.
     restart: unless-stopped
     networks: [milk]
 

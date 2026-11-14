@@ -220,5 +220,6 @@ docker compose up -d
 | `port is already allocated` | занят 8080/8000/8100/5432 — поменяйте `*_PORT` в `.env` |
 | `502 Bad Gateway` на `/api` | сервис `api` не прошёл healthcheck: `docker compose logs api` |
 | `routing` в статусе `degraded` | OSRM недоступен: проверьте `OSRM_BASE_URL`, интернет или свой OSRM |
+| отчёт `/api/runs/.../report` отдаёт 404 | прогон не сохранился: API поднят без `docker-compose.backend.yml` (нет `RUNS_DIR`, `/data` read-only). Поднимайте через `start.bat` или с наложением |
 | `web` падает на `npm ci` | нет `package-lock.json` в корне или фронтенд не в корне |
 | `no such service: osrm` | сервис под профилем: добавьте `--profile geo` |

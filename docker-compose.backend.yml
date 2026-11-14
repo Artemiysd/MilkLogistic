@@ -3,6 +3,8 @@
 #   docker compose -f docker-compose.yml -f docker-compose.backend.yml up -d --build
 services:
   api:
+    # своё имя образа: иначе базовый compose (заглушка) и бэкенд делят один тег
+    image: milklogistic-backend
     build:
       context: .
       dockerfile: backend/Dockerfile

@@ -141,8 +141,9 @@ def optimize(body: OptimizeRequest | None = None) -> dict:
         (RUNS_DIR / f"{result['run_id']}.json").write_text(
             json.dumps(result, ensure_ascii=False), encoding="utf-8"
         )
-    except OSError:
-        pass  # результат важнее сохранения
+    except OSError as exc:
+        # результат важнее сохранения, но молчать нельзя: иначе отчёт отдаёт 404
+        result["warnings"].append(f"Прогон не сохранён ({RUNS_DIR}): {exc}")
     return result
 
 
