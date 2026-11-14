@@ -16,7 +16,10 @@ import json
 import os
 import sys
 import time
+import urllib.error
+import urllib.request
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
@@ -233,12 +236,110 @@ def _violations(
     return violations
 
 
+def _post_json(url: str, payload: dict, timeout: float) -> dict:
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    request = urllib.request.Request(
+        url, data=body, headers={"Content-Type": "application/json", "Accept": "application/json"}
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _geometry_for_route(route: dict, depot: dict, routing_url: str, timeout: float) -> dict | None:
+    """Линия маршрута по дорогам: склад -> остановки -> склад."""
+    points = []
+    depot_coords = depot.get("coords")
+    if not depot_coords:
+        return None
+    points.append({"id": "depot", "lat": depot_coords["lat"], "lon": depot_coords["lon"]})
+
+    for stop in route["stops"]:
+        coords = stop.get("coords")
+        if not coords:
+            return None
+        points.append(
+            {
+                "id": stop.get("point_id") or f"stop-{stop['seq']}",
+                "lat": coords["lat"],
+                "lon": coords["lon"],
+            }
+        )
+    points.append({"id": "depot", "lat": depot_coords["lat"], "lon": depot_coords["lon"]})
+
+    payload = {"points": points, "return_geometry": True, "costs": "table"}
+    response = _post_json(f"{routing_url.rstrip('/')}/api/calculate-route", payload, timeout)
+    geometry = response.get("geometry")
+    if not geometry:
+        return None
+    # 5 знаков ~ 1 метр: файл меньше, на глаз не отличить
+    geometry["coordinates"] = [[round(lon, 5), round(lat, 5)] for lon, lat in geometry["coordinates"]]
+    return geometry
+
+
+def _get_json(url: str, timeout: float) -> dict:
+    request = urllib.request.Request(url, headers={"Accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _routing_ready(routing_url: str, timeout: float = 6.0) -> tuple[bool, str]:
+    """Быстрая проверка: жив ли сервис маршрутизации и видит ли он OSRM."""
+    try:
+        health = _get_json(f"{routing_url.rstrip('/')}/api/health", timeout)
+    except Exception as exc:  # noqa: BLE001 - причина важна только в тексте
+        return False, f"сервис маршрутизации недоступен: {exc}"
+    osrm = health.get("osrm") or {}
+    if not osrm.get("reachable"):
+        error = (osrm.get("error") or {}).get("message") or "OSRM не отвечает"
+        return False, f"OSRM недоступен: {error}"
+    return True, ""
+
+
+def attach_geometry(
+    routes: list[dict], depot: dict, routing_url: str, timeout: float = 15.0
+) -> list[str]:
+    """Добавляет routes[i]['geometry'] и возвращает предупреждения."""
+    if not routing_url:
+        return ["Геометрия не запрошена: не задан ROUTING_URL"]
+
+    ready, reason = _routing_ready(routing_url)
+    if not ready:
+        for route in routes:
+            route["geometry"] = None
+            route["geometry_source"] = None
+        return [f"Геометрия пропущена — {reason}"]
+
+    warnings: list[str] = []
+
+    def work(route: dict) -> tuple[dict, dict | None, str | None]:
+        try:
+            return route, _geometry_for_route(route, depot, routing_url, timeout), None
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+            return route, None, f"маршрут {route['route_number']}: {exc}"
+
+    failed = 0
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for route, geometry, error in pool.map(work, routes):
+            if error:
+                failed += 1
+                if failed <= 2:
+                    warnings.append("Не удалось получить геометрию: " + error)
+            route["geometry"] = geometry
+            route["geometry_source"] = "osrm" if geometry else None
+
+    if failed:
+        warnings.append(f"Без геометрии маршрутов: {failed} из {len(routes)}")
+    return warnings
+
+
 def run_plan(
     data: dict,
     cache: dict,
     drivers: int | None = None,
     shift_end: str = "17:00",
     loading_minutes: int = 30,
+    routing_url: str | None = None,
+    include_geometry: bool = True,
 ) -> dict:
     """Запускает планировщик Даника на реальной матрице и возвращает ответ API."""
     started = time.monotonic()
@@ -278,11 +379,21 @@ def run_plan(
             + ", ".join(sorted(provider.unknown_keys)[:5])
         )
 
+    if include_geometry:
+        warnings.extend(
+            attach_geometry(
+                routes,
+                data.get("depot", {}),
+                routing_url or os.environ.get("ROUTING_URL", ""),
+            )
+        )
+
     return {
         "run_id": uuid.uuid4().hex[:12],
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "mock": False,
         "solver": "logistics.RoutePlanner + OSRM matrix",
+        "depot": data.get("depot"),
         "options": {
             "drivers": drivers,
             "shift_start": settings.shift_start,
@@ -293,6 +404,8 @@ def run_plan(
             "max_workday_hours": settings.max_workday_hours,
             "matrix_provider": provider.provider,
             "matrix_built_at": provider.built_at,
+            "include_geometry": include_geometry,
+            "routing_url": routing_url or os.environ.get("ROUTING_URL"),
         },
         "routes": routes,
         "totals": {
@@ -306,6 +419,7 @@ def run_plan(
             "avg_load_ratio": avg_load,
             "orders_total": result.all_points_count,
             "addresses_total": result.all_stops_count,
+            "geometry_routes": sum(1 for route in routes if route.get("geometry")),
         },
         "baseline": {
             "distance_m": baseline_m,

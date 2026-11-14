@@ -31,7 +31,7 @@ services:
     environment:
       OSRM_BASE_URL: ${OSRM_BASE_URL:-https://router.project-osrm.org}
       OSRM_TIMEOUT_SEC: "30"
-      OSRM_MIN_INTERVAL_SEC: "0.4"
+      OSRM_MIN_INTERVAL_SEC: "${OSRM_MIN_INTERVAL_SEC:-0.4}"
       MAX_POINTS: "300"
     ports:
       - "${ROUTING_PORT:-8100}:8100"
