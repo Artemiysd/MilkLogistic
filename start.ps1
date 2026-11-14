@@ -117,9 +117,9 @@ if ($routing) { Ok "сервис маршрутизации отвечает" } 
 
 Step "Готово"
 Write-Host ""
-Write-Host "   Проверка расчётов ....... http://localhost:8000/   <- карта и цифры"
+Write-Host "   Интерфейс (фронтенд) .... http://localhost:8080   <- карта и маршруты"
+Write-Host "   Проверка расчётов ....... http://localhost:8000/   <- отчёт бэкенда"
 Write-Host "   API ..................... http://localhost:8000/docs"
-Write-Host "   Интерфейс (фронтенд) .... http://localhost:8080"
 Write-Host "   Маршрутизация ........... http://localhost:8100/api/health"
 Write-Host ""
 
@@ -138,4 +138,4 @@ try {
 
 Write-Host "   Проверка целиком: .\infra\preflight.ps1" -ForegroundColor DarkGray
 Write-Host "   Остановить:       .\stop.ps1" -ForegroundColor DarkGray
-if (-not $NoBrowser) { Start-Process "http://localhost:8000/" }
+if (-not $NoBrowser) { Start-Process "http://localhost:8080" }
