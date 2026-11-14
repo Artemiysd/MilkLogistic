@@ -1,4 +1,4 @@
-﻿import data from "../../data/logistics_data.json";
+import data from "./logisticsData.json";
 export const deliveryPoints = data.delivery_points
     .filter((point) => point.coords !== null)
     .map((point) => ({
