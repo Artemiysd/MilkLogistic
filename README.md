@@ -43,18 +43,23 @@ frontend (React + Leaflet) ──> nginx ──> /api ──> backend
 
 ## Быстрый старт
 
-Нужен **Docker Desktop** (Windows) или Docker + Compose (Linux/macOS).
+Нужен **Docker Desktop** (Windows, macOS) или Docker + Compose (Linux).
 
-```powershell
+```bash
 git clone https://github.com/Artemiysd/MilkLogistic.git
 cd MilkLogistic
-Copy-Item .env.example .env
+git checkout develop
+cp .env.example .env
 docker compose -f docker-compose.yml -f docker-compose.backend.yml up -d --build
 ```
 
-Открыть **http://localhost:8080** и нажать «Оптимизировать маршруты».
+macOS/Linux: `./start.sh` делает то же самое и открывает браузер.
+Windows: `start.bat`.
 
-На Windows проще: двойной щелчок по `start.bat` (сам поднимет Docker, бэкенд и OSRM).
+Открыть **http://localhost:8080** и нажать «Оптимизировать маршрут».
+
+> Apple Silicon: образ OSRM только amd64, в compose стоит `platform: linux/amd64`.
+> В Docker Desktop должно быть включено «Use Rosetta for x86_64/amd64 emulation».
 
 ### Без Docker (для разработки)
 

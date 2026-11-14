@@ -16,6 +16,27 @@ Windows: после установки Docker Desktop включи WSL2, зат�
 
 ## 2. Первый запуск
 
+**macOS / Linux:**
+
+```bash
+git clone https://github.com/Artemiysd/MilkLogistic.git
+cd MilkLogistic
+git checkout develop
+cp .env.example .env
+./start.sh
+```
+
+`start.sh` сам поднимет бэкенд, routing и базу (и свой OSRM, если граф уже собран),
+дождётся ответа API и откроет браузер. Остановить — `./stop.sh`.
+
+Вручную, без скрипта:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.backend.yml up -d --build
+```
+
+**Windows (PowerShell):**
+
 ```powershell
 git clone https://github.com/Artemiysd/MilkLogistic.git
 cd MilkLogistic
@@ -24,8 +45,12 @@ Copy-Item .env.example .env
 docker compose -f docker-compose.yml -f docker-compose.backend.yml up -d --build
 ```
 
-На Windows проще: двойной щелчок `start.bat` — он сам поднимет Docker Desktop, соберёт
-образы и откроет браузер.
+Или двойной щелчок `start.bat`.
+
+> **Apple Silicon (M1–M4):** образ OSRM собран только под amd64, в compose уже стоит
+> `platform: linux/amd64`. Нужно, чтобы в Docker Desktop было включено
+> Settings → General → «Use Rosetta for x86_64/amd64 emulation».
+> Если видишь `no matching manifest for linux/arm64` — включи Rosetta и перезапусти Docker.
 
 Важно: **всегда** запускать с `-f docker-compose.backend.yml`. Без него `api`
 поднимется как заглушка с read-only `/data`, и прогоны не будут сохраняться.
@@ -125,22 +150,26 @@ git push -u origin feature/название-фичи
 
 ## 8. Полезные команды
 
-| Команда | Что делает |
-|---|---|
-| `start.bat` / `stop.bat` | поднять / остановить стек |
-| `check.bat` | проверки окружения |
-| `verify-osrm.bat` | сверка маршрута с матрицей на 215 точках |
-| `plan.bat` | страница проверки расчётов |
-| `docker compose logs -f api` | логи API |
-| `docker compose ps` | статус контейнеров |
+| Windows | macOS / Linux | Что делает |
+|---|---|---|
+| `start.bat` | `./start.sh` | поднять стек |
+| `stop.bat` | `./stop.sh` | остановить |
+| `check.bat` | `./check.sh` | проверки окружения |
+| `verify-osrm.bat` | `./verify-osrm.sh` | сверка маршрута с матрицей |
+| `plan.bat` | открыть http://localhost:8000/ | страница проверки расчётов |
+| — | `./infra/osrm/prepare.sh` | подготовка своего OSRM |
+
+Логи: `docker compose logs -f api`. Статус: `docker compose ps`.
 
 ## 9. Частые проблемы
 
 | Симптом | Решение |
 |---|---|
 | `docker: команда не найдена` | Docker не в PATH — перезапусти терминал |
-| `docker-credential-desktop not found` | то же самое |
-| `выполнение сценариев отключено` | `powershell -ExecutionPolicy Bypass -File script.ps1` или `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
+| `docker-credential-desktop not found` | то же самое (Windows) |
+| `no matching manifest for linux/arm64` (Mac) | включить Rosetta в Docker Desktop → Settings → General |
+| `permission denied: ./start.sh` (Mac) | выполнить один раз `chmod +x *.sh infra/osrm/*.sh` |
+| `выполнение сценариев отключено` (Windows) | `powershell -ExecutionPolicy Bypass -File script.ps1` или `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
 | `port is already allocated` | поменяй `*_PORT` в `.env` |
 | отчёт по прогону отдаёт 404 | API поднят без `docker-compose.backend.yml` (нет `RUNS_DIR`, `/data` read-only) |
 | `routing` в статусе `degraded` | OSRM недоступен: проверь `OSRM_BASE_URL` в `.env` |

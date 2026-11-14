@@ -107,6 +107,8 @@ services:
   osrm:
     profiles: ["geo"]
     image: osrm/osrm-backend:v5.25.0
+    # образ собран только под amd64: на Apple Silicon идёт через Rosetta
+    platform: linux/amd64
     container_name: milk-osrm
     command: osrm-routed --algorithm mld --max-table-size 10000 /data/grodno.osrm
     volumes:
