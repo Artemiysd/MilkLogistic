@@ -24,16 +24,41 @@ class PlannerTests(unittest.TestCase):
         self.assertEqual(len(DATA["delivery_points"]), 214)
         self.assertEqual(len(stops), 192)
 
-    def test_full_demo_assigns_every_delivery_once(self):
+    # Вместимый датасет: 2 машины по 5 т, 10 заявок по 900 кг -> полная развозка
+    # с загрузкой ровно 90% и рейсами, влезающими в смену.
+    SMALL_FEASIBLE = {
+        "depot": {"address": "Склад"},
+        "vehicles": [{"id": "truck_5t", "capacity": 5000, "count": 2}],
+        "delivery_points": [
+            {"id": f"p{i}", "name": "Магазин", "address": f"Улица {i}", "demand": 900}
+            for i in range(1, 11)
+        ],
+        "constraints": {"min_load_ratio": 0.9, "max_workday_hours": 8, "unload_time_minutes": 30},
+    }
+
+    def test_full_demo_assigns_every_delivery_at_most_once(self):
         result = self.planner.build(DATA)
-        self.assertEqual(result.assigned_points_count, 214)
-        self.assertEqual(result.assigned_demand_kg, 63630)
         ids = [point_id for route in result.routes for visit in route.stops for point_id in visit.stop.point_ids]
         self.assertEqual(len(ids), len(set(ids)))
-        self.assertEqual(set(ids), {point["id"] for point in DATA["delivery_points"]})
+        # Каждая заявка либо развезена, либо честно в НЕ РАЗВЕЗЕНО (смены не резиновые).
+        unassigned_points = sum(stop.customer_count for stop in result.unassigned_stops)
+        self.assertEqual(result.assigned_points_count + unassigned_points, 214)
+        self.assertEqual(result.assigned_demand_kg + result.unassigned_weight_kg, 63630)
+        # Разгрузка фиксирована: при честных временах все рейсы влезают в смену.
+        for route in result.routes:
+            self.assertLessEqual(route.working_minutes, self.planner.settings.max_workday_minutes)
+            self.assertLessEqual(route.finish_minutes, self.planner.settings.end_minutes)
+
+    def test_small_feasible_dataset_is_delivered_fully(self):
+        result = self.planner.build(self.SMALL_FEASIBLE)
+        self.assertEqual(result.assigned_points_count, 10)
+        self.assertEqual(result.assigned_demand_kg, 9000)
+        self.assertEqual(len(result.unassigned_stops), 0)
+        ids = [point_id for route in result.routes for visit in route.stops for point_id in visit.stop.point_ids]
+        self.assertEqual(len(ids), len(set(ids)))
 
     def test_vehicle_capacity_and_minimum_load(self):
-        result = self.planner.build(DATA)
+        result = self.planner.build(self.SMALL_FEASIBLE)
         for route in result.routes:
             self.assertLessEqual(route.load_kg, route.vehicle.capacity_kg)
             self.assertGreaterEqual(route.utilization, 0.90)
@@ -48,10 +73,18 @@ class PlannerTests(unittest.TestCase):
                 self.assertEqual(route.vehicle.capacity_kg, 1500)
 
     def test_busy_stop_is_scheduled_after_busy_until(self):
-        point = next(p for p in DATA["delivery_points"] if p["id"] == "point_51")
-        busy_until = parse_clock("16:00")
-        result = self.planner.build(DATA, busy_until_by_address={point["address"]: busy_until})
-        visit = next(v for route in result.routes for v in route.stops if v.stop.address == point["address"])
+        data = {
+            "depot": {"address": "Склад"},
+            "vehicles": [{"id": "van_2t", "capacity": 2000, "count": 1}],
+            "delivery_points": [
+                {"id": "p1", "name": "Складчик", "address": "Улица 1", "demand": 500},
+                {"id": "p2", "name": "Занятая точка", "address": "Улица 2", "demand": 500},
+            ],
+            "constraints": {"min_load_ratio": 0.9, "max_workday_hours": 8, "unload_time_minutes": 30},
+        }
+        busy_until = parse_clock("10:00")
+        result = self.planner.build(data, busy_until_by_address={"Улица 2": busy_until})
+        visit = next(v for route in result.routes for v in route.stops if v.stop.address == "Улица 2")
         self.assertGreaterEqual(visit.service_start_minutes, busy_until)
         self.assertGreater(visit.wait_minutes, 0)
 
@@ -95,13 +128,13 @@ class PlannerTests(unittest.TestCase):
             self.assertEqual(len(load_problem(path)["delivery_points"]), 214)
 
     def test_export_creates_json_and_csv(self):
-        result = self.planner.build(DATA)
+        result = self.planner.build(self.SMALL_FEASIBLE)
         with tempfile.TemporaryDirectory() as tmp:
             paths = export_plan(result, tmp)
             self.assertEqual(len(paths), 3)
             self.assertTrue(all(path.exists() and path.stat().st_size > 0 for path in paths))
             exported = json.loads((Path(tmp) / "plan.json").read_text(encoding="utf-8"))
-            self.assertEqual(exported["summary"]["weight_assigned_kg"], 63630)
+            self.assertEqual(exported["summary"]["weight_assigned_kg"], 9000)
 
     def test_delivers_as_much_as_possible_when_fleet_is_too_small(self):
         data = {
@@ -142,9 +175,15 @@ class PlannerTests(unittest.TestCase):
     def test_lunch_break_extends_finish_but_not_working_time(self):
         result = self.planner.build(DATA)
         for route in result.routes:
-            span = route.finish_minutes - self.planner.settings.start_minutes
-            self.assertEqual(route.working_minutes, span - route.lunch_minutes)
+            # Инвариант «отработал = прошло времени минус обед» верен для рейса,
+            # начатого со старта смены; второй рейс стартует позже (водитель ждал
+            # свободную машину), поэтому для него проверяем только лимиты.
+            if route.trip_no == 1:
+                span = route.finish_minutes - self.planner.settings.start_minutes
+                self.assertEqual(route.working_minutes, span - route.lunch_minutes)
             self.assertLessEqual(route.lunch_minutes, 60)
+            self.assertLessEqual(route.working_minutes, self.planner.settings.max_workday_minutes)
+            self.assertLessEqual(route.finish_minutes, self.planner.settings.end_minutes)
 
 
 if __name__ == "__main__":

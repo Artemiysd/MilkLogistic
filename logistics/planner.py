@@ -7,7 +7,13 @@ from dataclasses import dataclass, replace
 from .data_loader import build_stops, expand_fleet, format_clock, parse_clock
 from .logger import log
 from .models import DeliveryStop, PlanningResult, StopVisit, Vehicle, VehicleRoute
-from .routing import FallbackTravelTimeProvider, TravelTimeProvider, improve_route_order, order_stops
+from .routing import (
+    FallbackTravelTimeProvider,
+    TravelTimeProvider,
+    improve_route_order,
+    order_stops,
+    route_schedule_minutes,
+)
 
 
 class PlanningError(RuntimeError):
@@ -86,19 +92,68 @@ class RoutePlanner:
         # 1) Сначала пытаемся развезти всё с полной загрузкой машин (90-100%).
         # 2) Если невозможно (груза больше, чем влезает, или есть требования к типу машины) —
         #    частичная доставка: максимум развезённого веса, приоритетные точки обслуживаются первыми.
+        # Разгрузка фиксирована на адрес, поэтому у рейса есть предел числа адресов по времени смены:
+        # работа = погрузка + N * (разгрузка + средний перегон) <= лимит смены.
+        depot_key = str(data.get("depot", {}).get("address", "DEPO"))
+        leg_samples = [self.travel.minutes(depot_key, stop.key, "", stop.street) for stop in stops]
+        avg_leg = sum(leg_samples) / len(leg_samples) if leg_samples else float(settings.default_drive_minutes)
+        max_stops_per_trip = max(
+            1,
+            int((settings.max_workday_minutes - settings.loading_minutes) // (settings.unloading_minutes + avg_leg)),
+        )
+        log(
+            "ПЛАН",
+            f"Лимит адресов на рейс по времени смены: {max_stops_per_trip} "
+            f"(средний перегон {avg_leg:.1f} мин, разгрузка {settings.unloading_minutes} мин/адрес)",
+        )
         assignment = None
         unassigned: list[DeliveryStop] = []
         if not any(stop.required_type for stop in stops):
-            assignment = self._find_feasible_assignment(stops, fleet, settings.min_load_ratio)
+            assignment = self._find_feasible_assignment(
+                stops, fleet, settings.min_load_ratio, max_stops=max_stops_per_trip
+            )
             if assignment is not None:
                 log("ПЛАН", f"Полная развозка возможна: {len(assignment)} рейсов, загрузка 90-100%")
         if assignment is None:
             settings = replace(settings, min_load_ratio=0.0)  # недогруз ожидаем, не warning
-            assignment, unassigned = self._best_effort_assignment(stops, fleet)
+            greedy, greedy_unassigned = self._best_effort_assignment(stops, fleet, settings=settings, data=data)
+            greedy, greedy_unassigned = self._improve_trip_weights(greedy, greedy_unassigned, data, settings)
+
+            alt, alt_unassigned = self._fill_by_capacity(
+                stops, fleet, data, settings, max_stops=None
+            )
+
+            def packed_weight(pack: list[tuple[Vehicle, list[DeliveryStop]]]) -> int:
+                return sum(s.demand_kg for _, trip_stops in pack for s in trip_stops)
+
+            def underloaded(pack: list[tuple[Vehicle, list[DeliveryStop]]]) -> int:
+                return sum(
+                    1 for v, trip_stops in pack
+                    if sum(s.demand_kg for s in trip_stops) < math.ceil(v.capacity_kg * min_ratio)
+                )
+
+            greedy_score = (packed_weight(greedy), -underloaded(greedy), -len(greedy))
+            alt_score = (packed_weight(alt), -underloaded(alt), -len(alt)) if alt else (-1, 0, 0)
+            # Приоритет критерия «загрузка не менее 90%»: выбираем набор без недогруженных
+            # рейсов, если он развозит не меньше 90% веса лучшего по весу варианта.
+            use_alt = alt is not None and (
+                (underloaded(alt) < underloaded(greedy) and packed_weight(alt) >= 0.9 * packed_weight(greedy))
+                or alt_score > greedy_score
+            )
+            if use_alt:
+                assignment, unassigned = alt, alt_unassigned
+                log(
+                    "ПЛАН",
+                    f"Стратегия «90-100%»: {len(assignment)} рейсов, "
+                    f"развезено {packed_weight(assignment)} кг",
+                )
+            else:
+                assignment, unassigned = greedy, greedy_unassigned
+            delivered = packed_weight(assignment)
             log(
                 "ПЛАН",
                 f"Полная развозка невозможна — частичная доставка: {len(assignment)} рейсов, "
-                f"не развезено {len(unassigned)} адресов",
+                f"развезено {delivered} кг, не развезено {len(unassigned)} адресов",
             )
 
         # Рейсы -> водители: водитель может сделать несколько рейсов за смену
@@ -182,6 +237,59 @@ class RoutePlanner:
                 if not progress:
                     break
 
+            # Второй рейс: водитель, освободившийся рано, берёт простаивающую машину
+            # (каждая машина — по-прежнему один рейс) и развозит остаток, пока хватает
+            # смены. Так простой водителя не пропадает, а лёгкие адреса, не попавшие
+            # в первые рейсы по критерию загрузки, всё равно доставляются.
+            used_vehicle_ids = {route.vehicle.vehicle_id for route in executed}
+            pool = list(unassigned)
+            for vehicle in sorted(
+                (v for v in fleet if v.vehicle_id not in used_vehicle_ids),
+                key=lambda v: -v.capacity_kg,
+            ):
+                if not pool:
+                    break
+                driver = max(
+                    range(driver_count),
+                    key=lambda i: min(
+                        settings.end_minutes - driver_free_at[i],
+                        settings.max_workday_minutes - driver_work[i],
+                    ),
+                )
+                slack = min(
+                    settings.end_minutes - driver_free_at[driver],
+                    settings.max_workday_minutes - driver_work[driver],
+                )
+                if slack < settings.loading_minutes + settings.unloading_minutes:
+                    break
+                extra = self._build_second_trip(
+                    vehicle,
+                    pool,
+                    data,
+                    settings,
+                    driver_free_at[driver],
+                    driver_lunch[driver],
+                    driver_work[driver],
+                )
+                if extra is None:
+                    continue
+                extra.driver_number = driver + 1
+                extra.trip_no = sum(1 for r in executed if r.driver_number == driver + 1) + 1
+                driver_free_at[driver] = extra.finish_minutes
+                driver_work[driver] += extra.working_minutes
+                driver_lunch[driver] = driver_lunch[driver] or extra.lunch_minutes > 0
+                executed.append(extra)
+                delivered = {visit.stop.key for visit in extra.stops}
+                pool = [s for s in pool if s.key not in delivered]
+                log(
+                    "РЕЙС",
+                    f"Водитель {driver + 1}, рейс {extra.trip_no}: {vehicle.label}, "
+                    f"второй рейс на свободной машине, {len(extra.stops)} адрес(ов), "
+                    f"{extra.load_kg} кг, работа {extra.working_minutes // 60} ч "
+                    f"{extra.working_minutes % 60:02d} мин, возврат {format_clock(extra.finish_minutes)}",
+                )
+            unassigned = pool
+
         unassigned_from_trips.extend(unassigned)
         unassigned = unassigned_from_trips
         routes = executed
@@ -215,12 +323,16 @@ class RoutePlanner:
         self,
         stops: list[DeliveryStop],
         fleet: list[Vehicle],
+        settings: PlannerSettings | None = None,
+        data: dict | None = None,
     ) -> tuple[list[tuple[Vehicle, list[DeliveryStop]]], list[DeliveryStop]]:
         """Частичная доставка: цель — развезти как можно больше.
 
         Порядок: priority-точки, затем точки с окном приёмки, затем остальные;
         внутри группы — более тяжёлые первыми. Каждой точке — машина с наименьшим
-        подходящим остатком (best-fit), перегруз запрещён.
+        подходящим остатком (best-fit), перегруз запрещён. Если заданы settings
+        и data, дополнительно проверяется, что рейс влезает в смену: разгрузка
+        фиксирована на адрес, поэтому лимит именно по времени, а не только по весу.
         """
         if not fleet:
             return [], list(stops)
@@ -244,10 +356,20 @@ class RoutePlanner:
             if not candidates:
                 unassigned.append(stop)
                 continue
-            chosen = min(
-                candidates,
-                key=lambda vid: (remaining[vid] - stop.demand_kg, by_id[vid].capacity_kg),
-            )
+            # Best-fit по остатку, затем ближайший запас вместимости.
+            candidates.sort(key=lambda vid: (remaining[vid] - stop.demand_kg, by_id[vid].capacity_kg))
+            chosen = candidates[0]
+            if settings is not None and data is not None:
+                chosen = next(
+                    (
+                        vid for vid in candidates
+                        if self._trip_fits_shift(assigned[vid] + [stop], data, settings)
+                    ),
+                    None,
+                )
+            if chosen is None:
+                unassigned.append(stop)
+                continue
             assigned[chosen].append(stop)
             remaining[chosen] -= stop.demand_kg
         return [
@@ -256,11 +378,231 @@ class RoutePlanner:
             if vehicle_stops
         ], unassigned
 
+    def _improve_trip_weights(
+        self,
+        assignment: list[tuple[Vehicle, list[DeliveryStop]]],
+        unassigned: list[DeliveryStop],
+        data: dict,
+        settings: PlannerSettings,
+    ) -> tuple[list[tuple[Vehicle, list[DeliveryStop]]], list[DeliveryStop]]:
+        """Догрузка в частичном режиме: лёгкую заявку в рейсе меняем на более тяжёлую из неразвезённых.
+
+        Лимит смены — число остановок (разгрузка фиксирована на адрес), поэтому обмен
+        строго 1:1: количество адресов в рейсе не растёт, время проверяется честно
+        по матрице. Результат: больше развезённый вес и выше загрузка машины
+        (критерий 90-100% выполняется там, где это физически возможно).
+        Приоритетные, узкоуличные и требующие определённый тип машины заявки
+        из рейса не изымаются.
+        """
+        if not assignment or not unassigned:
+            return assignment, unassigned
+
+        trips: list[list] = [[vehicle, list(stops)] for vehicle, stops in assignment]
+        pool: list[DeliveryStop] = sorted(unassigned, key=lambda s: -s.demand_kg)
+
+        def fixed(stop: DeliveryStop) -> bool:
+            return bool(stop.priority or stop.required_type or stop.restricted)
+
+        swaps = 0
+        gained_kg = 0
+        for _pass in range(3):
+            improved = False
+            for trip in trips:
+                vehicle, stops = trip
+                if not stops:
+                    continue
+                load = sum(s.demand_kg for s in stops)
+                removable = sorted(
+                    (s for s in stops if not fixed(s)),
+                    key=lambda s: s.demand_kg,
+                )
+                for out_stop in removable:
+                    capacity_after = vehicle.capacity_kg - (load - out_stop.demand_kg)
+                    tested = 0
+                    for cand in pool:
+                        if cand.demand_kg <= out_stop.demand_kg:
+                            continue  # pool отсортирован по убыванию веса: дальше только легче
+                        if cand.demand_kg > capacity_after:
+                            continue
+                        if not self._vehicle_can_serve(vehicle, cand):
+                            continue
+                        tested += 1
+                        if tested > 6:
+                            break
+                        new_stops = [s for s in stops if s.key != out_stop.key] + [cand]
+                        if self._trip_fits_shift(new_stops, data, settings):
+                            stops.remove(out_stop)
+                            stops.append(cand)
+                            pool.remove(cand)
+                            pool.append(out_stop)
+                            gained_kg += cand.demand_kg - out_stop.demand_kg
+                            swaps += 1
+                            load = sum(s.demand_kg for s in stops)
+                            improved = True
+                            break
+            if not improved:
+                break
+
+        if swaps:
+            log(
+                "ПЛАН",
+                f"Догрузка тяжёлыми заявками: {swaps} обмен(ов), развезённый вес вырос на {gained_kg} кг",
+            )
+        return [(vehicle, stops) for vehicle, stops in trips], pool
+
+    def _fill_by_capacity(
+        self,
+        stops: list[DeliveryStop],
+        fleet: list[Vehicle],
+        data: dict,
+        settings: PlannerSettings,
+        max_stops: int | None = None,
+    ) -> tuple[list[tuple[Vehicle, list[DeliveryStop]]], list[DeliveryStop]]:
+        """Стратегия «каждая машина 90-100%»: набираем рейсы по очереди от большой
+        машины к малой, каждая — до полной/почти полной загрузки по весу в пределах
+        лимита адресов и честного времени смены. Машина, которую не удалось добить
+        до 90%, не используется (сокращение транспорта), её заявки остаются
+        в неразвезённых. Машина с допуском на узкие улицы используется обязательно,
+        если на ней есть обязательные заявки.
+        """
+        remaining = list(stops)
+        if not remaining or not fleet:
+            return [], list(remaining)
+
+        def group(stop: DeliveryStop) -> int:
+            if stop.priority:
+                return 0
+            if stop.earliest_service_minutes is not None:
+                return 1
+            return 2
+
+        assignment: list[tuple[Vehicle, list[DeliveryStop]]] = []
+        small_fleet = [v for v in fleet if v.restricted_to_small_streets]
+        big_fleet = sorted(
+            (v for v in fleet if not v.restricted_to_small_streets),
+            key=lambda v: -v.capacity_kg,
+        )
+        for vehicle in big_fleet + small_fleet:
+            if not remaining:
+                break
+            mandatory: list[DeliveryStop] = []
+            if vehicle.restricted_to_small_streets:
+                mandatory = sorted(
+                    (s for s in remaining if s.restricted and self._vehicle_can_serve(vehicle, s)),
+                    key=lambda s: -s.demand_kg,
+                )
+            trip = self._fill_vehicle(
+                remaining, vehicle, mandatory, max_stops, data, settings, group
+            )
+            if trip is None:
+                continue  # 90% набрать не удалось — машина остаётся в гараже
+            used = {s.key for s in trip}
+            remaining = [s for s in remaining if s.key not in used]
+            assignment.append((vehicle, trip))
+
+        # Догрузка: в рейсы со свободным весом и лимитом адресов добавляем
+        # самые тяжёлые из остатков (больше развезённого веса).
+        progress = True
+        while progress and remaining:
+            progress = False
+            for vehicle, trip in assignment:
+                if max_stops is not None and len(trip) >= max_stops:
+                    continue
+                spare = vehicle.capacity_kg - sum(s.demand_kg for s in trip)
+                if spare <= 0:
+                    continue
+                for stop in sorted(remaining, key=lambda s: (-s.demand_kg, s.key)):
+                    if stop.demand_kg > spare or not self._vehicle_can_serve(vehicle, stop):
+                        continue
+                    if self._trip_fits_shift(trip + [stop], data, settings):
+                        trip.append(stop)
+                        remaining.remove(stop)
+                        progress = True
+                        break
+        return assignment, remaining
+
+    def _fill_vehicle(
+        self,
+        remaining: list[DeliveryStop],
+        vehicle: Vehicle,
+        mandatory: list[DeliveryStop],
+        max_stops: int | None,
+        data: dict,
+        settings: PlannerSettings,
+        group,
+    ) -> list[DeliveryStop] | None:
+        """Набирает один рейс: тяжёлые заявки первыми, пока влезают по весу и времени.
+
+        Возвращает None, если до 90% загрузки набрать не удалось (машина не используется).
+        Для машины с обязательными заявками на узкие улицы нижняя граница не проверяется:
+        доставить их важнее критерия загрузки.
+        """
+        mandatory = [
+            s for s in mandatory
+            if self._vehicle_can_serve(vehicle, s)
+        ]
+        mandatory_weight = sum(s.demand_kg for s in mandatory)
+        if mandatory_weight > vehicle.capacity_kg:
+            return None
+        trip: list[DeliveryStop] = list(mandatory)
+        load = mandatory_weight
+        taken = {s.key for s in trip}
+        ordered = sorted(
+            (
+                s for s in remaining
+                if s.key not in taken and self._vehicle_can_serve(vehicle, s)
+            ),
+            key=lambda s: (group(s), -s.demand_kg, s.key),
+        )
+        for stop in ordered:
+            if max_stops is not None and len(trip) >= max_stops:
+                break
+            if load + stop.demand_kg > vehicle.capacity_kg:
+                continue
+            if self._trip_fits_shift(trip + [stop], data, settings):
+                trip.append(stop)
+                load += stop.demand_kg
+        lower = 0 if mandatory else math.ceil(vehicle.capacity_kg * 0.9)
+        if load < lower:
+            return None
+        return trip
+
+    def _trip_fits_shift(
+        self,
+        stops: list[DeliveryStop],
+        data: dict,
+        settings: PlannerSettings,
+    ) -> bool:
+        """Грубая проверка (жадный порядок без локального поиска): рейс влезает в смену?"""
+        if not stops:
+            return True
+        depot_key = str(data.get("depot", {}).get("address", "DEPO"))
+        ordered = order_stops(
+            stops,
+            self.travel,
+            depot_key,
+            settings.start_minutes,
+            settings.loading_minutes,
+            settings.unloading_minutes,
+        )
+        finish, work = route_schedule_minutes(
+            ordered,
+            depot_key,
+            self.travel,
+            settings.start_minutes,
+            settings.loading_minutes,
+            settings.unloading_minutes,
+            settings.lunch_start_minutes,
+            settings.lunch_minutes,
+        )
+        return work <= settings.max_workday_minutes and finish <= settings.end_minutes
+
     def _find_feasible_assignment(
         self,
         stops: list[DeliveryStop],
         fleet: list[Vehicle],
         min_ratio: float,
+        max_stops: int | None = None,
     ) -> list[tuple[Vehicle, list[DeliveryStop]]] | None:
         restricted_stops = [stop for stop in stops if stop.restricted]
         total_demand = sum(stop.demand_kg for stop in stops)
@@ -286,12 +628,12 @@ class RoutePlanner:
                 small_candidates = [v for v in combo if v.restricted_to_small_streets]
                 for small_vehicle in small_candidates:
                     result = self._try_assign_with_small_vehicle(
-                        stops, list(combo), small_vehicle, min_ratio
+                        stops, list(combo), small_vehicle, min_ratio, max_stops=max_stops
                     )
                     if result is not None:
                         return result
             else:
-                result = self._pack_bins(stops, list(combo), min_ratio)
+                result = self._pack_bins(stops, list(combo), min_ratio, max_stops=max_stops)
                 if result is not None:
                     return result
         return None
@@ -302,6 +644,7 @@ class RoutePlanner:
         vehicles: list[Vehicle],
         small_vehicle: Vehicle,
         min_ratio: float,
+        max_stops: int | None = None,
     ) -> list[tuple[Vehicle, list[DeliveryStop]]] | None:
         mandatory = [stop for stop in stops if stop.restricted]
         regular = [stop for stop in stops if not stop.restricted]
@@ -323,9 +666,11 @@ class RoutePlanner:
 
         selected_keys = {stop.key for stop in selected_extra}
         small_stops = mandatory + selected_extra
+        if max_stops is not None and len(small_stops) > max_stops:
+            return None
         remaining = [stop for stop in regular if stop.key not in selected_keys]
         normal_vehicles = [vehicle for vehicle in vehicles if vehicle.vehicle_id != small_vehicle.vehicle_id]
-        packed = self._pack_bins(remaining, normal_vehicles, min_ratio)
+        packed = self._pack_bins(remaining, normal_vehicles, min_ratio, max_stops=max_stops)
         if packed is None:
             return None
         return [(small_vehicle, small_stops)] + packed
@@ -357,6 +702,7 @@ class RoutePlanner:
         stops: list[DeliveryStop],
         vehicles: list[Vehicle],
         min_ratio: float,
+        max_stops: int | None = None,
     ) -> list[tuple[Vehicle, list[DeliveryStop]]] | None:
         if not vehicles:
             return [] if not stops else None
@@ -384,7 +730,7 @@ class RoutePlanner:
             # Разгрузка занимает фиксированное время на адрес, поэтому число остановок
             # балансируем почти равномерно между машинами, а не пропорционально тоннажу.
             ideal_count = len(remaining) / (len(vehicles_sorted) - index)
-            chosen = self._subset_sum_near(remaining, lower, upper, ideal, ideal_count)
+            chosen = self._subset_sum_near(remaining, lower, upper, ideal, ideal_count, max_stops=max_stops)
             if chosen is None:
                 return None
             selected_indices, selected_weight = chosen
@@ -405,6 +751,7 @@ class RoutePlanner:
         upper: int,
         target: float,
         target_count: float,
+        max_stops: int | None = None,
     ) -> tuple[tuple[int, ...], int] | None:
         # Для одного и того же тоннажа сохраняем набор с количеством адресов,
         # наиболее близким к ожидаемому для этой машины.
@@ -414,7 +761,7 @@ class RoutePlanner:
             snapshot = list(states.items())
             for current_weight, selected in snapshot:
                 new_weight = current_weight + weight
-                if new_weight > upper:
+                if new_weight > upper or (max_stops is not None and len(selected) >= max_stops):
                     continue
                 candidate = selected + (index,)
                 previous = states.get(new_weight)
@@ -435,6 +782,58 @@ class RoutePlanner:
             ),
         )
         return states[chosen_weight], chosen_weight
+
+    def _build_second_trip(
+        self,
+        vehicle: Vehicle,
+        pool: list[DeliveryStop],
+        data: dict,
+        settings: PlannerSettings,
+        start_minutes: int,
+        lunch_taken: bool,
+        work_used: int,
+    ) -> VehicleRoute | None:
+        """Второй рейс на свободной машине: набирает остаток заявок в остаток смены водителя.
+
+        Машина не перегружается, время считается по фактической матрице с учётом
+        обеда и уже отработанных водителем часов.
+        """
+        ordered = sorted(
+            pool,
+            key=lambda s: (0 if s.priority else 1, -s.demand_kg, s.key),
+        )
+        stops: list[DeliveryStop] = []
+        load = 0
+        for stop in ordered:
+            if not self._vehicle_can_serve(vehicle, stop):
+                continue
+            if load + stop.demand_kg > vehicle.capacity_kg:
+                continue
+            trial = stops + [stop]
+            route = self._schedule_route(
+                vehicle,
+                trial,
+                data,
+                settings,
+                start_minutes=start_minutes,
+                lunch_taken=lunch_taken,
+            )
+            if (
+                work_used + route.working_minutes <= settings.max_workday_minutes
+                and route.finish_minutes <= settings.end_minutes
+            ):
+                stops.append(stop)
+                load += stop.demand_kg
+        if not stops:
+            return None
+        return self._schedule_route(
+            vehicle,
+            stops,
+            data,
+            settings,
+            start_minutes=start_minutes,
+            lunch_taken=lunch_taken,
+        )
 
     def _schedule_route(
         self,
@@ -475,6 +874,7 @@ class RoutePlanner:
             settings.unloading_minutes,
         )
         # Локальный поиск порядка: раньше возврат на базу — без переработки и с меньшим пробегом.
+        # Цель учитывает окно обеда (кроме случая, когда обед уже взят в предыдущем рейсе).
         ordered = improve_route_order(
             ordered,
             depot_key,
@@ -482,6 +882,8 @@ class RoutePlanner:
             start,
             settings.loading_minutes,
             settings.unloading_minutes,
+            lunch_start_minutes=None if lunch_taken else settings.lunch_start_minutes,
+            lunch_minutes=settings.lunch_minutes,
         )
         current_time = start + settings.loading_minutes
         current_location = depot_key
@@ -496,7 +898,9 @@ class RoutePlanner:
         for stop in ordered:
             drive = self.travel.minutes(current_location, stop.key, current_street, stop.street)
             leg_km = km_of(current_location, stop.key, current_street, stop.street) if km_of else 0.0
-            arrival, _, road_lunch = through_lunch(current_time, drive)
+            # through_lunch возвращает (начало участка, конец участка, обед внутри):
+            # прибытие — это КОНЕЦ перегона, а не его начало.
+            _, arrival, road_lunch = through_lunch(current_time, drive)
             ready = arrival
             if stop.earliest_service_minutes is not None and stop.earliest_service_minutes >= start:
                 ready = max(ready, stop.earliest_service_minutes)

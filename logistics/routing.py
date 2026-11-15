@@ -111,6 +111,59 @@ def order_stops(
     return ordered
 
 
+def _advance_through_lunch(current: int, duration: int, lunch_start: int | None, lunch_minutes: int) -> int:
+    """Конец участка, который начался в `current`, с учётом паузы на обед.
+
+    Обед не входит в рабочее время: если участок накрывает окно обеда,
+    к длительности добавляется пауза (или участок стартует после обеда).
+    """
+    if not lunch_minutes or lunch_start is None:
+        return current + duration
+    lunch_end = lunch_start + lunch_minutes
+    if current + duration <= lunch_start or current >= lunch_end:
+        return current + duration
+    if current >= lunch_start:
+        return lunch_end + duration
+    return current + duration + lunch_minutes  # обед целиком внутри участка
+
+
+def _simulate_route(
+    sequence: list[DeliveryStop],
+    depot_key: str,
+    travel: TravelTimeProvider,
+    start_minutes: int,
+    loading_minutes: int,
+    service_minutes: int,
+    lunch_start_minutes: int | None,
+    lunch_minutes: int,
+) -> tuple[int, int]:
+    """Прогон маршрута: (возврат на базу, суммарные паузы на обед)."""
+    current = start_minutes + loading_minutes
+    pauses = 0
+
+    def advance(moment: int, duration: int) -> int:
+        nonlocal pauses
+        end = _advance_through_lunch(moment, duration, lunch_start_minutes, lunch_minutes)
+        pauses += end - moment - duration
+        return end
+
+    location = depot_key
+    street = ""
+    for stop in sequence:
+        drive = travel.minutes(location, stop.key, street, stop.street)
+        arrival = advance(current, drive)
+        ready = arrival
+        if stop.earliest_service_minutes is not None and stop.earliest_service_minutes >= start_minutes:
+            ready = max(ready, stop.earliest_service_minutes)
+        if stop.busy_until is not None:
+            ready = max(ready, stop.busy_until)
+        current = advance(ready, service_minutes)
+        location = stop.key
+        street = stop.street
+    finish = advance(current, travel.minutes(location, depot_key, street, ""))
+    return finish, pauses
+
+
 def route_finish_minutes(
     sequence: list[DeliveryStop],
     depot_key: str,
@@ -118,23 +171,33 @@ def route_finish_minutes(
     start_minutes: int,
     loading_minutes: int,
     service_minutes: int = 30,
+    lunch_start_minutes: int | None = None,
+    lunch_minutes: int = 0,
 ) -> int:
-    """Время возврата на базу для заданного порядка: путь + ожидания окон + разгрузки."""
-    current = start_minutes + loading_minutes
-    location = depot_key
-    street = ""
-    for stop in sequence:
-        drive = travel.minutes(location, stop.key, street, stop.street)
-        arrival = current + drive
-        ready = arrival
-        if stop.earliest_service_minutes is not None and stop.earliest_service_minutes >= start_minutes:
-            ready = max(ready, stop.earliest_service_minutes)
-        if stop.busy_until is not None:
-            ready = max(ready, stop.busy_until)
-        current = ready + service_minutes
-        location = stop.key
-        street = stop.street
-    return current + travel.minutes(location, depot_key, street, "")
+    """Время возврата на базу: путь + ожидания окон + разгрузки + пауза на обед."""
+    finish, _ = _simulate_route(
+        sequence, depot_key, travel, start_minutes, loading_minutes,
+        service_minutes, lunch_start_minutes, lunch_minutes,
+    )
+    return finish
+
+
+def route_schedule_minutes(
+    sequence: list[DeliveryStop],
+    depot_key: str,
+    travel: TravelTimeProvider,
+    start_minutes: int,
+    loading_minutes: int,
+    service_minutes: int = 30,
+    lunch_start_minutes: int | None = None,
+    lunch_minutes: int = 0,
+) -> tuple[int, int]:
+    """(возврат на базу, чистая работа без обеда) для заданного порядка точек."""
+    finish, pauses = _simulate_route(
+        sequence, depot_key, travel, start_minutes, loading_minutes,
+        service_minutes, lunch_start_minutes, lunch_minutes,
+    )
+    return finish, finish - start_minutes - pauses
 
 
 def route_legs_minutes(sequence: list[DeliveryStop], depot_key: str, travel: TravelTimeProvider) -> int:
@@ -156,17 +219,27 @@ def improve_route_order(
     loading_minutes: int,
     service_minutes: int = 30,
     max_passes: int = 20,
+    lunch_start_minutes: int | None = None,
+    lunch_minutes: int = 0,
 ) -> list[DeliveryStop]:
     """Локальный поиск (or-opt): перенос одной точки на другое место.
 
     Цель — раньше вернуться на базу: меньше минут в пути и меньше ожидания окон,
-    чтобы укладываться в смену без переработки. Сначала чистый пробег, затем
-    финальная проверка по времени возврата с учётом ожиданий.
+    чтобы укладываться в смену без переработки. Цель учитывает паузу на обед.
     """
     best = list(ordered)
 
     def finish_cost(sequence: list[DeliveryStop]) -> int:
-        return route_finish_minutes(sequence, depot_key, travel, start_minutes, loading_minutes, service_minutes)
+        return route_finish_minutes(
+            sequence,
+            depot_key,
+            travel,
+            start_minutes,
+            loading_minutes,
+            service_minutes,
+            lunch_start_minutes,
+            lunch_minutes,
+        )
 
     best_total = finish_cost(best)
     for _ in range(max_passes):

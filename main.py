@@ -16,6 +16,7 @@ from logistics.data_loader import (
 from logistics.export import export_plan
 from logistics.geo_random import KM_MAX, KM_MIN, DEFAULT_SPEED_KMH, KmTravelTimeProvider
 from logistics.logger import log, session_start
+from logistics.matrix_provider import MatrixTravelProvider, load_matrix_cache
 from logistics.planner import PlannerSettings, PlanningError, RoutePlanner
 from logistics.reporting import print_route_details, print_summary
 
@@ -98,7 +99,21 @@ def ask_driver_count(fleet_size: int) -> int:
         return count
 
 
-def make_planner(data: dict[str, Any], drive_minutes: int, load_minutes: int) -> RoutePlanner:
+def travel_provider_label(planner: RoutePlanner) -> str:
+    """Короткое описание источника километража для сводки и ограничений."""
+    provider = planner.travel
+    if isinstance(provider, MatrixTravelProvider):
+        return (f"дорожная матрица {provider.provider_name}, {len(provider.points)} узлов "
+                f"(реальные расстояния, создана {provider.built_at})")
+    return f"генерируется: адрес {KM_MIN:g}–{KM_MAX:g} км от базы, скорость {DEFAULT_SPEED_KMH:g} км/ч (детерминированно)"
+
+
+def make_planner(
+    data: dict[str, Any],
+    drive_minutes: int,
+    load_minutes: int,
+    data_path: Path | None = None,
+) -> RoutePlanner:
     constraints = data.get("constraints", {})
     settings = PlannerSettings(
         shift_start="08:00",
@@ -109,7 +124,26 @@ def make_planner(data: dict[str, Any], drive_minutes: int, load_minutes: int) ->
         max_workday_hours=float(constraints.get("max_workday_hours", 8)),
         min_load_ratio=float(constraints.get("min_load_ratio", 0.90)),
     )
-    # Километраж между адресами генерируется (детерминированно), пока нет реальной дорожной матрицы.
+    # Реальная дорожная матрица (OSRM), если она лежит рядом с данными.
+    cache = load_matrix_cache(data_path)
+    if cache is not None:
+        provider = MatrixTravelProvider(cache)
+        covered = sum(
+            1 for point in data.get("delivery_points", [])
+            if normalize_address(point.get("address", "")) in provider.index_by_address
+        )
+        all_points = len(data.get("delivery_points", []))
+        log(
+            "ПЛАН",
+            f"Километраж: дорожная матрица {provider.provider_name}, "
+            f"{len(provider.points)} узлов (создана {provider.built_at}); "
+            f"покрытие адресов {covered}/{all_points}",
+        )
+        if covered < all_points:
+            log("ПЛАН", f"{all_points - covered} адрес(ов) вне матрицы — для них fallback {provider.fallback_minutes} мин / {provider.fallback_km} км")
+        return RoutePlanner(settings, travel_provider=provider)
+    # Fallback: километраж между адресами генерируется (детерминированно).
+    log("ПЛАН", "Дорожная матрица не найдена (data/matrix_cache.json) — километраж генерируется")
     return RoutePlanner(settings, travel_provider=KmTravelTimeProvider(speed_kmh=DEFAULT_SPEED_KMH))
 
 
@@ -255,7 +289,7 @@ def show_input_info(data: dict[str, Any], path: Path, planner: RoutePlanner, dri
     print(f"Погрузка: {planner.settings.loading_minutes} мин | "
           f"разгрузка: {planner.settings.unloading_minutes} мин на адрес")
     print(f"Минимальная загрузка машины: {planner.settings.min_load_ratio:.0%} — рейс с меньшей загрузкой не выезжает")
-    print(f"Километраж генерируется: адрес {KM_MIN:g}–{KM_MAX:g} км от базы, скорость {DEFAULT_SPEED_KMH:g} км/ч")
+    print(f"Километраж: {travel_provider_label(planner)}")
 
 
 def show_constraints(data: dict[str, Any], planner: RoutePlanner) -> None:
@@ -272,7 +306,7 @@ def show_constraints(data: dict[str, Any], planner: RoutePlanner) -> None:
     print("Рейс с загрузкой ниже 90% не выезжает; рейс, не влезающий в смену, не отправляется.")
     print(f"Ограниченные улицы: {', '.join(constraints.get('restricted_streets', [])) or 'не заданы'} "
           f"(только транспорт до {constraints.get('restricted_vehicle_capacity', 1500)} кг / с флагом restricted_to_small_streets)")
-    print(f"Километраж генерируется: {KM_MIN:g}–{KM_MAX:g} км от базы, скорость {DEFAULT_SPEED_KMH:g} км/ч (детерминированно).")
+    print(f"Километраж: {travel_provider_label(planner)}")
     print("delivery_window — самое раннее время приёмки; время до 08:00 считается доступностью к началу смены.")
     print("Цели: уложиться в окно доставки, сократить суммарный пробег и число задействованных машин.")
 
@@ -354,6 +388,7 @@ def load_another_json(planner: RoutePlanner):
             new_data,
             planner.settings.default_drive_minutes,
             planner.settings.loading_minutes,
+            data_path=new_path,
         )
         new_drivers = ask_driver_count(len(expand_fleet(new_data)))
         print("JSON загружен. Пересчитываю распределение...")
@@ -402,7 +437,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         data = load_problem(data_path)
         log("ЗАГРУЗКА", f"Файл {data_path.name}: {len(data['delivery_points'])} заявок, {len(data['vehicles'])} типов машин — валидация пройдена")
-        planner = make_planner(data, args.drive_minutes, args.load_minutes)
+        planner = make_planner(data, args.drive_minutes, args.load_minutes, data_path=data_path)
         fleet_size = len(expand_fleet(data))
         drivers = args.drivers if args.drivers else ask_driver_count(fleet_size)
         if drivers < 1:

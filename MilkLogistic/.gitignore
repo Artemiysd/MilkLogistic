@@ -1,0 +1,53 @@
+# зависимости и сборка
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# секреты и локальные настройки
+.env
+.env.local
+.env.*.local
+*.local
+
+# данные, которые не коммитим
+# граф OSRM (Беларусь + Гродно) весит ~370 МБ и собирается prepare.ps1
+infra/osrm/data/
+# результаты прогонов оптимизатора
+data/runs/
+data/exports/
+
+# рабочие файлы планировщика
+logs/
+output/
+
+# архивы образов для офлайн-демо (docker save)
+*.tar
+*.tar.gz
+*.zip
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# мусор редакторов и временные файлы
+*.log
+*.tmp
+*.bak
+*.orig
+*.swp
+*~
+~$*
