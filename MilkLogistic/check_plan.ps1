@@ -6,8 +6,21 @@ $ErrorActionPreference = "Stop"
 
 function Line([string]$t) { Write-Host $t }
 
+# Windows PowerShell 5.1 читает JSON с сервера как Latin-1, если в Content-Type
+# нет charset. Забираем сырые байты и декодируем их как UTF-8 сами.
+function Get-Json([string]$url, [string]$method = "GET", [string]$body = $null) {
+    $params = @{ Uri = $url; Method = $method; TimeoutSec = 300; UseBasicParsing = $true }
+    if ($body) {
+        $params.Body = $body
+        $params.ContentType = "application/json; charset=utf-8"
+    }
+    $response = Invoke-WebRequest @params
+    $text = [System.Text.Encoding]::UTF8.GetString($response.RawContentStream.ToArray())
+    return $text | ConvertFrom-Json
+}
+
 try {
-    $h = Invoke-RestMethod "http://localhost:8000/api/health" -TimeoutSec 10
+    $h = Get-Json "http://localhost:8000/api/health"
     $matrix = if ($h.matrix.ready) { "готова $($h.matrix.size)x$($h.matrix.size) ($($h.matrix.provider))" } else { "НЕ ГОТОВА" }
     Line ("Состояние API: " + $h.status + " | Матрица OSRM: " + $matrix)
 } catch {
@@ -16,7 +29,7 @@ try {
 }
 
 try {
-    $r = Invoke-RestMethod -Method Post -Uri "http://localhost:8000/api/optimize" -TimeoutSec 300
+    $r = Get-Json "http://localhost:8000/api/optimize" -method "POST" -body "{}"
 } catch {
     Line ("ОШИБКА расчёта плана: " + $_.Exception.Message)
     if ($_.ErrorDetails) { Line $_.ErrorDetails.Message }
