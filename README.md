@@ -1,13 +1,22 @@
 # MilkLogistic — планирование доставки «Молочного Мира»
 
-Оптимизация развоза 214 заявок по Гродно: реальные дорожные расстояния, распределение
-по 16 машинам, маршруты на карте и сравнение «как в накладной / после оптимизации».
+**Оптимизация развоза 214 заявок по Гродно:** реальные дорожные расстояния, 16 машин,
+маршруты на карте, выдача водителям, отметки доставки и доп. заезды.
 
-![статус](https://img.shields.io/badge/докер-docker%20compose-blue)
-![данные](https://img.shields.io/badge/точек-214-green)
-![матрица](https://img.shields.io/badge/матрица-215%C3%97215-green)
+[![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
+[![Desktop](https://img.shields.io/badge/desktop-Windows%20%7C%20macOS-2563eb)](.github/workflows/desktop.yml)
+[![Web](https://img.shields.io/badge/demo-GitHub%20Pages-22c55e)](https://artemiysd.github.io/MilkLogistic/)
+[![Tests](https://img.shields.io/badge/tests-34%20passed-brightgreen)](tests)
+[![Points](https://img.shields.io/badge/points-214-green)](#)
+[![Matrix](https://img.shields.io/badge/matrix-215%C3%97215-green)](#)
 
-> Подробный гайд по кнопкам, пересчётам и работе водителя: [`README-GUIDE.md`](README-GUIDE.md).
+**Ссылки:** [Онлайн-демо](https://artemiysd.github.io/MilkLogistic/) ·
+[Релизы и установщики](https://github.com/Artemiysd/MilkLogistic/releases) ·
+[Подробный гайд](README-GUIDE.md)
+
+> Онлайн-демо на GitHub Pages показывает интерфейс и демо-данные: расчёты выполняет
+> бэкенд, поэтому локальный запуск (ниже) — основной способ. Для полностью рабочего
+> демо в интернете нужен публичный адрес API (`API_BASE_URL`).
 
 ## Что умеет
 
@@ -32,24 +41,49 @@
 
 ## Архитектура
 
-```
-data/logistics_data.json ──┐
-                           ├─> backend (FastAPI) ──> logistics/ (планировщик) ──> JSON плана
-data/matrix_cache.json  ───┘            │
-                                        ├─> services/routing (FastAPI) ──> OSRM ──> геометрия
-                                        └─> PostgreSQL (под историю/1С)
-
-frontend (React + Leaflet) ──> nginx ──> /api ──> backend
+```mermaid
+flowchart LR
+    A[1C / JSON] -->|import| B[backend FastAPI]
+    B --> C[planner logistics]
+    C -->|matrix| D[data/matrix_cache.json]
+    B --> E[routing service]
+    E --> F[OSRM]
+    B --> G[(PostgreSQL)]
+    B --> H[runs / reports]
+    C --> I[web React + Leaflet]
+    I --> J[logist cabinet]
+    I --> K[driver page /driver/token]
 ```
 
 | Компонент | Что делает | Порт |
 |---|---|---|
-| `frontend` (`src/`) | карта, маршруты, статистика | 8080 |
-| `backend/` | API, отчёты, связка планировщика и матрицы | 8000 |
+| `src/` | React + Leaflet: планирование, кабинет, страница водителя | 8080 |
+| `backend/` | API, импорт 1С, база водителей, отчёты | 8000 |
 | `logistics/` | планировщик: распределение, порядок, расписание | — |
 | `services/routing/` | координаты → OSRM → км/минуты/геометрия | 8100 |
-| `osrm/` | движок маршрутизации по карте Гродно | 5000 |
+| OSRM | локальная маршрутизация по карте Гродно (опционально) | 5000 |
 | `db` | PostgreSQL (задел под 1С и историю) | 5432 |
+
+## Структура проекта
+
+```text
+MilkLogistic/
+├── .github/workflows/      CI: GitHub Pages и сборки Windows/macOS
+├── backend/app/            FastAPI: API, импорт 1С, водители, отчёты
+├── logistics/              алгоритм: распределение, маршрут, расписание
+├── services/routing/       сервис OSRM
+├── src/                    React + TypeScript + Leaflet
+│   ├── pages/              главная, кабинет логиста, страница водителя
+│   └── components/         карта, карточки, обработка ошибок
+├── data/                   заявки, матрица, импортированные наборы, прогоны
+├── infra/                  nginx, mock-api, сборка матрицы, OSRM
+├── electron/               десктоп-обёртка (Windows/macOS)
+├── tests/                  тесты планировщика, импорта, водителей
+├── public/examples/        примеры выгрузок 1С
+├── schema.json             контракт данных 1С ↔ бэкенд ↔ фронтенд
+├── docker-compose.yml      стек: web + api + routing + db (+ osrm)
+└── README-GUIDE.md         подробный гайд по кнопкам и пересчётам
+```
 
 ## Быстрый старт
 
@@ -58,15 +92,18 @@ frontend (React + Leaflet) ──> nginx ──> /api ──> backend
 ```bash
 git clone https://github.com/Artemiysd/MilkLogistic.git
 cd MilkLogistic
-git checkout develop
 cp .env.example .env
 docker compose -f docker-compose.yml -f docker-compose.backend.yml up -d --build
 ```
 
-macOS/Linux: `./start.sh` делает то же самое и открывает браузер.
+macOS/Linux: `chmod +x *.sh && ./start.sh` — делает то же и открывает браузер.
 Windows: `start.bat`.
 
-Открыть **http://localhost:8080** и нажать «Оптимизировать маршрут».
+Открыть **http://localhost:8080** и нажать «Построить маршруты».
+
+> Apple Silicon: образ OSRM только amd64, в compose стоит `platform: linux/amd64`.
+> В Docker Desktop должно быть включено «Use Rosetta for x86_64/amd64 emulation».
+> Без локального графа OSRM используется публичный сервер — Rosetta не нужна.
 
 > Apple Silicon: образ OSRM только amd64, в compose стоит `platform: linux/amd64`.
 > В Docker Desktop должно быть включено «Use Rosetta for x86_64/amd64 emulation».
@@ -205,6 +242,19 @@ Linux/macOS: те же команды, но через `docker compose` напр
 - точка на Советской / Мостовой / Замковой обслуживается только машиной 1,5 т;
 - расстояние между одинаковыми координатами = 0, но разгрузка на каждую организацию своя.
 
+## Сборки и версии
+
+| Что | Где взять |
+|---|---|
+| **Онлайн-демо** | https://artemiysd.github.io/MilkLogistic/ |
+| **Windows** | [Releases](https://github.com/Artemiysd/MilkLogistic/releases): `MilkLogistic Setup *.exe` и portable |
+| **macOS** | Releases: `.dmg` и `.zip` для **arm64** и **x64** |
+| **Исходники** | ветка `main` (стабильно) и `develop` (рабочая), тег `v1.0.0` |
+| **Артефакты CI** | Actions → *Build desktop apps* |
+
+Релиз создаётся автоматически при пуше тега `v*`: workflow собирает Windows и macOS
+и прикладывает установщики к GitHub Release.
+
 ## Десктоп (Electron)
 
 Приложение собирается как обычное Windows-приложение: Electron раздаёт фронтенд из `dist/`
@@ -260,7 +310,7 @@ GitHub → **Actions → Build desktop apps → Run workflow** → скачат�
 
 ## GitHub Pages
 
-Веб-версия публикуется автоматически: [`.github/workflows/pages.yml`](../.github/workflows/pages.yml)
+Веб-версия публикуется автоматически: [`.github/workflows/pages.yml`](.github/workflows/pages.yml)
 собирает фронтенд с базой `/MilkLogistic/` и кладёт в ветку `gh-pages`.
 
 - адрес: **https://artemiysd.github.io/MilkLogistic/**
