@@ -13,6 +13,7 @@ import {
     runExtraWave,
 } from "../api/client.ts";
 import { formatKm, formatMinutes, plural, routeColor } from "../utils/format.ts";
+import { appPath } from "../utils/base.ts";
 
 function Dashboard() {
     const [apiData, setApiData] = useState<ApiData | null>(null);
@@ -268,8 +269,8 @@ function Dashboard() {
                     <p>Планирование маршрутов и выдача их водителям</p>
                 </div>
                 <div className="header-actions">
-                    <a className="header-link" href="/examples/1c-example-day.json" download>Скачать пример 1С</a>
-                    <a className="header-link" href="/dispatch">Кабинет логиста →</a>
+                    <a className="header-link" href={appPath("/examples/1c-example-day.json")} download>Скачать пример 1С</a>
+                    <a className="header-link" href={appPath("/dispatch")}>Кабинет логиста →</a>
                 </div>
             </header>
 
@@ -328,7 +329,7 @@ function Dashboard() {
                         Формат — как в примере. После расчёта новая выгрузка пойдёт
                         в доп. заезд, текущий план не сбросится.
                     </p>
-                    <a className="example-link" href="/examples/1c-example-day.json" download>
+                    <a className="example-link" href={appPath("/examples/1c-example-day.json")} download>
                         Скачать пример 1С (JSON)
                     </a>
 
@@ -570,4 +571,5 @@ function Dashboard() {
 }
 
 export default Dashboard;
+
 

@@ -30,6 +30,8 @@ data/exports/
 data/imports/
 # база водителей и выданных маршрутов (SQLite)
 data/milk.db*
+# собранные Electron-приложения
+release/
 
 # рабочие файлы планировщика
 logs/

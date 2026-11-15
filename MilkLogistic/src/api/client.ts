@@ -12,9 +12,17 @@ import type {
 /**
  * Базовый адрес API.
  * В Docker фронт и бэкенд на одном origin: nginx проксирует /api -> api:8000.
- * Локально `npm run dev` работает через proxy из vite.config.ts.
+ * В Electron — адрес локального бэкенда из настроек, на GitHub Pages —
+ * абсолютный адрес задеплоенного API (VITE_API_BASE_URL).
  */
-const BASE = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+declare global {
+    interface Window {
+        milkApiBase?: string;
+    }
+}
+
+const runtimeBase = typeof window !== "undefined" ? window.milkApiBase ?? "" : "";
+const BASE = (runtimeBase || import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 
 export class ApiError extends Error {
     status: number;

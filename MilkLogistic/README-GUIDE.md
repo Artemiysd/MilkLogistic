@@ -42,6 +42,30 @@ stop.bat         :: остановить
 
 Проверка живости: `http://localhost:8000/api/health` — должно быть `"status":"ok"` и `matrix.ready: true`.
 
+### 2.1 Десктоп (Electron)
+
+```bash
+cd MilkLogistic
+npm install
+npm run electron:start   # окно с приложением (бэкенд уже должен работать)
+npm run electron:build   # release/MilkLogistic Setup 1.0.0.exe и portable
+```
+
+Electron поднимает локальный сервер для `dist/` и открывает окно. Расчёты выполняет бэкенд
+по адресу `http://localhost:8080`. Если API на другом адресе — задайте `MILK_API_BASE`
+или `milk-config.json` рядом с exe:
+
+```json
+{ "apiBase": "http://localhost:8000" }
+```
+
+### 2.2 Онлайн-версия (GitHub Pages)
+
+https://artemiysd.github.io/MilkLogistic/ — собирается workflow при пуше в `develop`/`main`
+и публикуется в ветку `gh-pages`. Для работы расчётов нужен публичный API:
+задайте `API_BASE_URL` в Settings → Secrets and variables → Actions → Variables.
+SPA-маршруты (`/dispatch`, `/driver/...`) работают через `404.html`.
+
 ---
 
 ## 3. Роли

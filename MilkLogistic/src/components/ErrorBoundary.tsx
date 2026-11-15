@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { appPath } from "../utils/base.ts";
 
 interface Props {
     children: ReactNode;
@@ -32,7 +33,7 @@ class ErrorBoundary extends Component<Props, State> {
                 <p>Данные и расчёты не потеряны — обновите страницу или загрузите файл заново.</p>
                 <div className="fatal-actions">
                     <button onClick={() => window.location.reload()}>Обновить страницу</button>
-                    <a href="/">На главную</a>
+                    <a href={appPath("/")}>На главную</a>
                 </div>
             </main>
         );

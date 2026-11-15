@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import {
     cancelAssignment,
     cleanupDrivers,
@@ -10,10 +10,11 @@ import {
     seedDrivers,
 } from "../api/client";
 import type { Assignment, DispatchOverview, Driver } from "../types/logistics";
+import { appPath } from "../utils/base.ts";
 import "./DispatchPage.css";
 
 function linkOf(driver: Driver): string {
-    return `${window.location.origin}${driver.link}`;
+    return `${window.location.origin}${appPath(driver.link)}`;
 }
 
 function DispatchPage() {
@@ -180,7 +181,7 @@ function DispatchPage() {
                     >
                         Начать смену заново
                     </button>
-                    <a className="dispatch-link" href="/">← К планированию</a>
+                    <a className="dispatch-link" href={appPath("/")}>← К планированию</a>
                 </div>
             </header>
 
@@ -208,7 +209,7 @@ function DispatchPage() {
                             <button
                                 className="dispatch-primary"
                                 disabled={!demo?.driver}
-                                onClick={() => demo?.driver && window.open(demo.driver.link, "_blank")}
+                                onClick={() => demo?.driver && window.open(appPath(demo.driver.link), "_blank")}
                             >
                                 Посмотреть как водитель
                             </button>
@@ -217,7 +218,7 @@ function DispatchPage() {
                                     Скопировать первую ссылку
                                 </button>
                             )}
-                            <a className="dispatch-ghost" href="/" style={{ textDecoration: "none" }}>
+                            <a className="dispatch-ghost" href={appPath("/")} style={{ textDecoration: "none" }}>
                                 Нужен другой маршрут? Постройте план
                             </a>
                         </div>
@@ -269,7 +270,7 @@ function DispatchPage() {
                                             <td>{driver.phone || "—"}</td>
                                             <td>{driver.vehicle_id || "—"}</td>
                                             <td className="dispatch-link-cell">
-                                                <a href={driver.link} target="_blank" rel="noreferrer">открыть</a>
+                                                <a href={appPath(driver.link)} target="_blank" rel="noreferrer">открыть</a>
                                                 <button onClick={() => void copyLink(driver)}>копировать</button>
                                             </td>
                                             <td>
@@ -332,7 +333,7 @@ function DispatchPage() {
                                             </p>
                                             <div className="dispatch-card-actions">
                                                 {driver && (
-                                                    <a className="dispatch-open" href={driver.link} target="_blank" rel="noreferrer">
+                                                    <a className="dispatch-open" href={appPath(driver.link)} target="_blank" rel="noreferrer">
                                                         Открыть маршрут
                                                     </a>
                                                 )}
@@ -363,3 +364,4 @@ function DispatchPage() {
 }
 
 export default DispatchPage;
+

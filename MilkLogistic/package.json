@@ -1,13 +1,42 @@
 {
   "name": "dairy-logistics",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Планирование доставки MilkLogistic: 1С, маршруты, водители",
+  "author": "MilkLogistic",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron:start": "npm run build && electron .",
+    "electron:dir": "npm run build && electron-builder --dir",
+    "electron:build": "npm run build && electron-builder --win"
+  },
+  "build": {
+    "appId": "by.grsu.milklogistic",
+    "productName": "MilkLogistic",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "MilkLogistic"
+    }
   },
   "dependencies": {
     "leaflet": "^1.9.4",
@@ -22,6 +51,8 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0",
     "eslint": "^10.14.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",

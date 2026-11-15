@@ -205,6 +205,42 @@ Linux/macOS: те же команды, но через `docker compose` напр
 - точка на Советской / Мостовой / Замковой обслуживается только машиной 1,5 т;
 - расстояние между одинаковыми координатами = 0, но разгрузка на каждую организацию своя.
 
+## Десктоп (Electron)
+
+Приложение собирается как обычное Windows-приложение: Electron раздаёт фронтенд из `dist/`
+и подключается к бэкенду (по умолчанию `http://localhost:8080`).
+
+```bash
+npm install
+npm run electron:start   # запуск в окне (нужен поднятый стек: start.bat)
+npm run electron:dir     # распакованная сборка: release/win-unpacked
+npm run electron:build   # установщик и portable: release/
+```
+
+Готовые файлы после сборки:
+
+- `release/MilkLogistic Setup 1.0.0.exe` — установщик;
+- `release/MilkLogistic 1.0.0.exe` — portable, без установки;
+- `release/win-unpacked/MilkLogistic.exe` — распакованная версия.
+
+Перед расчётами должен быть запущен бэкенд (`start.bat`, Docker). Адрес API меняется
+переменной `MILK_API_BASE` или файлом `milk-config.json` рядом с exe / в профиле:
+
+```json
+{ "apiBase": "http://localhost:8080" }
+```
+
+## GitHub Pages
+
+Веб-версия публикуется автоматически: [`.github/workflows/pages.yml`](../.github/workflows/pages.yml)
+собирает фронтенд с базой `/MilkLogistic/` и кладёт в ветку `gh-pages`.
+
+- адрес: **https://artemiysd.github.io/MilkLogistic/**
+- включить: Settings → Pages → Build and deployment → Deploy from a branch → `gh-pages` / root;
+- для рабочих расчётов задайте переменную репозитория `API_BASE_URL`
+  (Settings → Secrets and variables → Actions → Variables) с публичным HTTPS-адресом бэкенда.
+  Без неё сайт открывает интерфейс, но запросы к API не работают.
+
 ## Документация
 
 - [`README-GUIDE.md`](README-GUIDE.md) — подробный гайд: каждая кнопка, пересчёты, ссылки
