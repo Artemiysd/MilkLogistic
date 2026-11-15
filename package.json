@@ -1,7 +1,7 @@
-﻿{
+{
   "name": "dairy-logistics",
   "private": true,
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Планирование доставки MilkLogistic: 1С, маршруты, водители",
   "author": "MilkLogistic",
   "type": "module",

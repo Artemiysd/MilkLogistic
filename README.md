@@ -1,4 +1,4 @@
-﻿# MilkLogistic — планирование доставки «Молочного Мира»
+# MilkLogistic — планирование доставки «Молочного Мира»
 
 **Оптимизация развоза 214 заявок по Гродно:** реальные дорожные расстояния, 16 машин,
 маршруты на карте, выдача водителям, отметки доставки и доп. заезды.
@@ -249,7 +249,7 @@ Linux/macOS: те же команды, но через `docker compose` напр
 | **Онлайн-демо** | https://artemiysd.github.io/MilkLogistic/ |
 | **Windows** | [Releases](https://github.com/Artemiysd/MilkLogistic/releases): `MilkLogistic Setup *.exe` и portable |
 | **macOS** | Releases: `.dmg` и `.zip` для **arm64** и **x64** |
-| **Исходники** | ветка `main` (стабильно) и `develop` (рабочая), тег `v1.0.3` |
+| **Исходники** | ветка `main` (стабильно) и `develop` (рабочая), тег `v1.0.4` |
 | **Артефакты CI** | Actions → *Build desktop apps* |
 
 Релиз создаётся автоматически при пуше тега `v*`: workflow собирает Windows и macOS
