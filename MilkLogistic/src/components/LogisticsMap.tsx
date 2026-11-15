@@ -74,7 +74,12 @@ function LogisticsMap({ points,
         ? routes
         : routes.filter((route) => route.number === selectedRoute);
     return (
-        <MapContainer center={position} zoom={12} style={{ height: "500px", width: "100%" }}>
+        <MapContainer
+            key={`${position[0].toFixed(4)}:${position[1].toFixed(4)}`}
+            center={position}
+            zoom={12}
+            style={{ height: "500px", width: "100%" }}
+        >
             <RemoveLeafletPrefix />
             <FitBounds
                 points={points}

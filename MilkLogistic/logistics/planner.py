@@ -11,6 +11,7 @@ from .routing import (
     FallbackTravelTimeProvider,
     TravelTimeProvider,
     improve_route_order,
+    improve_route_order_2opt,
     order_stops,
     route_schedule_minutes,
 )
@@ -31,6 +32,7 @@ class PlannerSettings:
     default_drive_minutes: int = 7
     max_workday_hours: float = 8.0
     min_load_ratio: float = 0.90
+    enforce_min_load: bool = False
 
     @property
     def start_minutes(self) -> int:
@@ -78,6 +80,7 @@ class RoutePlanner:
             default_drive_minutes=self.settings.default_drive_minutes,
             max_workday_hours=max_hours,
             min_load_ratio=min_ratio,
+            enforce_min_load=bool(source_constraints.get("enforce_min_load", self.settings.enforce_min_load)),
         )
         stops = build_stops(data, busy_until_by_address)
         fleet = expand_fleet(data)
@@ -156,6 +159,12 @@ class RoutePlanner:
                 f"развезено {delivered} кг, не развезено {len(unassigned)} адресов",
             )
 
+        # Правило «машина не выезжает меньше 90%»: сначала пробуем переложить
+        # заявки из недогруженных рейсов в соседние, чтобы не гонять полупустую машину.
+        assignment, rebalanced = self._rebalance_underloaded(assignment, data, settings, min_ratio)
+        if rebalanced:
+            log("ПЛАН", f"Перебалансировка: {rebalanced} адрес(ов) перенесено из недогруженных рейсов")
+
         # Рейсы -> водители: водитель может сделать несколько рейсов за смену
         # (вернулся на базу — взял следующую машину), пока суммарная работа не превысит
         # лимит и возврат не выйдет за конец смены. Переработку не строим.
@@ -170,7 +179,9 @@ class RoutePlanner:
             # Длинные рейсы раздаём первым — короткие потом вставляем в остаток смены.
             estimates.sort(key=lambda item: (-item[0], -item[1]))
 
-            driver_count = available_vehicles if available_vehicles else len(estimates)
+            # Без явного лимита водителей доступен весь парк: иначе на рейс,
+            # который не успел получить водителя, заявки уходили в «не развезено».
+            driver_count = available_vehicles if available_vehicles else len(fleet)
             driver_free_at = [settings.start_minutes] * driver_count
             driver_work = [0] * driver_count
             driver_lunch = [False] * driver_count
@@ -290,6 +301,24 @@ class RoutePlanner:
                 )
             unassigned = pool
 
+        # Жёсткое правило «не выпускать машину с загрузкой ниже 90%»:
+        # такие рейсы снимаются, их заявки честно уходят в «не развезено»,
+        # а логист решает — отправить всё равно или пересчитать/догрузить.
+        if settings.enforce_min_load and min_ratio > 0:
+            kept: list[VehicleRoute] = []
+            for route in executed:
+                minimum = math.ceil(route.vehicle.capacity_kg * min_ratio)
+                if route.load_kg < minimum:
+                    unassigned_from_trips.extend(visit.stop for visit in route.stops)
+                    log(
+                        "ПЛАН",
+                        f"Рейс {route.vehicle.vehicle_id} снят: загрузка {route.load_kg} кг "
+                        f"< {minimum} кг (90%) — решает логист",
+                    )
+                else:
+                    kept.append(route)
+            executed = kept
+
         unassigned_from_trips.extend(unassigned)
         unassigned = unassigned_from_trips
         routes = executed
@@ -309,6 +338,67 @@ class RoutePlanner:
             result.planner_mode = "best_effort"
         result.warnings.extend(self._global_validation(result, stops, fleet, settings))
         return result
+
+    def _rebalance_underloaded(
+        self,
+        assignment: list[tuple[Vehicle, list[DeliveryStop]]],
+        data: dict,
+        settings: PlannerSettings,
+        min_ratio: float,
+    ) -> tuple[list[tuple[Vehicle, list[DeliveryStop]]], int]:
+        """Убирает недогруженные рейсы: переносит их заявки в другие машины.
+
+        Правило «машина не выезжает меньше 90%» проверяется до расписания:
+        лёгкие заявки из недогруженного рейса по одной переезжают в те машины,
+        где есть место по весу и времени. Рейс, который опустел, из плана уходит;
+        рейс, который добрал норму, остаётся.
+        """
+        min_ratio = min_ratio or 0.0
+        if min_ratio <= 0 or not assignment:
+            return assignment, 0
+
+        trips: list[list] = [[vehicle, list(stops)] for vehicle, stops in assignment if stops]
+        moved = 0
+
+        def load(stops: list[DeliveryStop]) -> int:
+            return sum(stop.demand_kg for stop in stops)
+
+        def has_norm(vehicle: Vehicle, stops: list[DeliveryStop]) -> bool:
+            return load(stops) >= math.ceil(vehicle.capacity_kg * min_ratio)
+
+        for _ in range(4):
+            sparse = [trip for trip in trips if not has_norm(trip[0], trip[1])]
+            if not sparse:
+                break
+            changed = False
+            for vehicle, stops in list(sparse):
+                for stop in sorted(list(stops), key=lambda item: item.demand_kg):
+                    candidates = []
+                    for target_vehicle, target_stops in trips:
+                        if target_vehicle is vehicle:
+                            continue
+                        if load(target_stops) + stop.demand_kg > target_vehicle.capacity_kg:
+                            continue
+                        if not self._vehicle_can_serve(target_vehicle, stop):
+                            continue
+                        if not self._trip_fits_shift(target_stops + [stop], data, settings):
+                            continue
+                        free = target_vehicle.capacity_kg - load(target_stops) - stop.demand_kg
+                        candidates.append((free, target_vehicle.vehicle_id, target_stops))
+                    if not candidates:
+                        continue
+                    candidates.sort()
+                    _, _, target_stops = candidates[0]
+                    target_stops.append(stop)
+                    stops.remove(stop)
+                    moved += 1
+                    changed = True
+                    if not stops or has_norm(vehicle, stops):
+                        break
+            if not changed:
+                break
+
+        return [(vehicle, stops) for vehicle, stops in trips if stops], moved
 
     @staticmethod
     def _vehicle_can_serve(vehicle: Vehicle, stop: DeliveryStop) -> bool:
@@ -885,6 +975,17 @@ class RoutePlanner:
             lunch_start_minutes=None if lunch_taken else settings.lunch_start_minutes,
             lunch_minutes=settings.lunch_minutes,
         )
+        # 2-opt убирает «крестовые» перегоны, которые перестановкой одной точки не лечатся.
+        ordered = improve_route_order_2opt(
+            ordered,
+            depot_key,
+            self.travel,
+            start,
+            settings.loading_minutes,
+            settings.unloading_minutes,
+            lunch_start_minutes=None if lunch_taken else settings.lunch_start_minutes,
+            lunch_minutes=settings.lunch_minutes,
+        )
         current_time = start + settings.loading_minutes
         current_location = depot_key
         current_street = ""
@@ -986,7 +1087,7 @@ class RoutePlanner:
             )
         if len(assigned_keys) != len(set(assigned_keys)):
             warnings.append("Один или несколько физических адресов назначены более чем одной машине")
-        if result.assigned_demand_kg != result.total_demand_kg:
+        if result.assigned_demand_kg != result.total_demand_kg and not result.unassigned_stops:
             warnings.append("Сумма назначенного груза не совпадает с исходной заявкой")
 
         restricted = {stop.key for stop in source_stops if stop.restricted}

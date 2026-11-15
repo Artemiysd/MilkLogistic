@@ -8,7 +8,261 @@
     background:white;
     padding: 20px 40px;
     border-bottom: 1px solid #e5e7eb;
-
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.header-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.header-link {
+    background: #eff6ff;
+    color: #1d4ed8;
+    text-decoration: none;
+    padding: 10px 14px;
+    border-radius: 9px;
+    font-size: 14px;
+    border: 1px solid #bfdbfe;
+    white-space: nowrap;
+}
+.header-link:hover {
+    background: #dbeafe;
+}
+.steps {
+    display: flex;
+    gap: 10px;
+    padding: 16px 40px 0;
+}
+.step {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: #6b7280;
+    font-size: 14px;
+}
+.step span {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #e5e7eb;
+    color: #374151;
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+}
+.step.active {
+    border-color: #2563eb;
+    color: #1d4ed8;
+    font-weight: 600;
+}
+.step.active span {
+    background: #2563eb;
+    color: white;
+}
+.step.done span {
+    background: #16a34a;
+    color: white;
+}
+.map-topline {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 12px;
+}
+.map-topline .map-search,
+.map-topline .map-controls {
+    margin-bottom: 0;
+    width: auto;
+}
+.map-topline .map-controls button {
+    flex: 0 0 auto;
+    min-width: 130px;
+}
+.hint {
+    margin: 8px 0 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #6b7280;
+}
+.dataset-name {
+    margin: -6px 0 10px;
+    font-size: 13px;
+    color: #6b7280;
+    overflow-wrap: anywhere;
+}
+.example-link {
+    display: inline-block;
+    margin-top: 8px;
+    font-size: 13px;
+    color: #1d4ed8;
+}
+.results-grid {
+    grid-template-columns: repeat(4, 1fr);
+}
+.result-card span {
+    display: block;
+    margin-top: 6px;
+    font-size: 13px;
+    color: #6b7280;
+}
+.review {
+    margin: 20px 0;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 18px;
+}
+.review.has-warning {
+    background: #fffbeb;
+    border-color: #fde68a;
+}
+.review.is-clean {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+}
+.review-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.review h3 {
+    margin: 0 0 6px;
+    color: #1d4ed8;
+    font-size: 18px;
+}
+.review p {
+    margin: 0;
+    color: #4b5563;
+    font-size: 14px;
+    line-height: 1.45;
+}
+.review-counts {
+    display: flex;
+    gap: 10px;
+}
+.review-counts div {
+    text-align: center;
+    background: white;
+    border-radius: 10px;
+    padding: 8px 14px;
+    min-width: 70px;
+}
+.review-counts strong {
+    display: block;
+    font-size: 24px;
+}
+.review-counts .ok strong {
+    color: #15803d;
+}
+.review-counts .bad strong {
+    color: #b91c1c;
+}
+.review-counts span {
+    font-size: 12px;
+    color: #6b7280;
+}
+.review-list {
+    list-style: none;
+    margin: 12px 0 0;
+    padding: 0;
+}
+.review-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    font-size: 14px;
+}
+.review-list li:last-child {
+    border-bottom: none;
+}
+.review-list em {
+    font-style: normal;
+    color: #b91c1c;
+    white-space: nowrap;
+}
+.review-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+}
+.review-actions button {
+    padding: 11px 16px;
+    border-radius: 9px;
+    border: 1px solid #2563eb;
+    cursor: pointer;
+    font-size: 14px;
+}
+.review-actions .primary {
+    background: #2563eb;
+    color: white;
+}
+.review-actions .ghost {
+    background: white;
+    color: #1d4ed8;
+    width: auto;
+}
+.review-actions button:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+.review-hint {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #6b7280;
+}
+.route-picker button.underloaded {
+    border-color: #f59e0b;
+    color: #b45309;
+    background: #fffbeb;
+}
+.route-picker button.underloaded.active {
+    background: #f59e0b;
+    color: white;
+}
+@media (max-width: 1100px) {
+    .dashboard-content {
+        grid-template-columns: 1fr;
+    }
+    .results-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+@media (max-width: 640px) {
+    .header,
+    .sidebar,
+    .map-container {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+    .steps {
+        padding: 12px 16px 0;
+        flex-direction: column;
+    }
+    .dashboard-content {
+        padding: 16px;
+    }
+    .results {
+        margin: 0 16px 24px;
+    }
+    .map-topline {
+        grid-template-columns: 1fr;
+    }
+    .result-card strong {
+        font-size: 28px;
+    }
 }
 .header h1 {
     margin: 0;
@@ -186,7 +440,7 @@
 }
 .results-grid{
     display: grid;
-    grid-template-columns:repeat(3,1fr);
+    grid-template-columns:repeat(4,1fr);
     gap:20px;
 }
 .results-card{
@@ -238,6 +492,52 @@
     background: #fef2f2;
     border: 1px solid #fecaca;
     color: #b91c1c;
+}
+.alert.info {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e3a8a;
+}
+
+/* операции логиста: загрузка выгрузки, отправка, доп. заезд */
+.side-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.ghost-button {
+    width: 100%;
+    padding: 11px 12px;
+    border-radius: 8px;
+    border: 1px solid #2563eb;
+    background: #fff;
+    color: #1d4ed8;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.ghost-button:hover {
+    background: #eff6ff;
+}
+
+.ghost-button:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.side-link {
+    display: block;
+    text-align: center;
+    margin-top: 4px;
+    color: #1d4ed8;
+    font-size: 14px;
+    text-decoration: none;
+}
+
+.side-link:hover {
+    text-decoration: underline;
 }
 
 /* выбор маршрута в режиме «Маршруты» */

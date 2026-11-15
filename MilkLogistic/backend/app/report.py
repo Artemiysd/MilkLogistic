@@ -370,6 +370,8 @@ def render_index(runs: list[dict], health: dict) -> str:
       <tr><th>Груз</th><td>{_e(health.get('demand_kg'))} кг</td></tr>
       <tr><th>Матрица</th><td>{_e((health.get('matrix') or {}).get('size'))} × {_e((health.get('matrix') or {}).get('size'))},
         провайдер {_e((health.get('matrix') or {}).get('provider'))}</td></tr>
+      <tr><th>Набор данных</th><td>{_e((health.get('dataset') or {}).get('name'))}
+        (импортировано: {_e((health.get('dataset') or {}).get('imported'))})</td></tr>
     </table>
   </div>
 
@@ -399,6 +401,8 @@ def render_index(runs: list[dict], health: dict) -> str:
       <tr><th><a href="/api/health">/api/health</a></th><td>состояние: точки, машины, матрица</td></tr>
       <tr><th><a href="/api/data">/api/data</a></th><td>данные, которые реально загрузились</td></tr>
       <tr><th>POST /api/optimize</th><td>расчёт плана, возвращает JSON и run_id</td></tr>
+      <tr><th>POST /api/import</th><td>импорт выгрузки 1С телом запроса (см. schema.json)</td></tr>
+      <tr><th><a href="/api/datasets">/api/datasets</a></th><td>импортированные наборы и активный набор</td></tr>
       <tr><th>/api/runs/&lt;id&gt;/report</th><td>этот отчёт: карта, маршруты, расшифровка</td></tr>
       <tr><th>/api/runs/&lt;id&gt;/geojson</th><td>линии маршрутов для любой ГИС</td></tr>
     </table>

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from logistics.data_loader import build_stops, load_problem, parse_clock, validate_problem
 from logistics.export import export_plan
+from logistics.matrix_provider import MatrixTravelProvider
 from logistics.planner import PlannerSettings, PlanningError, RoutePlanner
 from logistics.routing import MatrixTravelTimeProvider
 
@@ -184,6 +185,91 @@ class PlannerTests(unittest.TestCase):
             self.assertLessEqual(route.lunch_minutes, 60)
             self.assertLessEqual(route.working_minutes, self.planner.settings.max_workday_minutes)
             self.assertLessEqual(route.finish_minutes, self.planner.settings.end_minutes)
+
+    def test_real_matrix_plan_is_honest_about_time_and_cargo(self):
+        """Реальный план не «телепортирует»: смены не резиновые, груз учтён полностью.
+
+        В старой версии перегон не двигал часы, поэтому 16 машин «успевали»
+        развезти все 214 заявок. С честным временем часть адресов физически
+        не влезает в смену и обязана попасть в «не развезено».
+        """
+        cache = json.loads((ROOT / "data" / "matrix_cache.json").read_text(encoding="utf-8-sig"))
+        planner = RoutePlanner(PlannerSettings(), travel_provider=MatrixTravelProvider(cache))
+        data = load_problem(ROOT / "data" / "logistics_data.json")
+        result = planner.build(data, available_vehicles=16)
+
+        self.assertTrue(result.routes)
+        self.assertEqual(result.assigned_demand_kg + result.unassigned_weight_kg, 63630)
+        for route in result.routes:
+            self.assertLessEqual(route.working_minutes, planner.settings.max_workday_minutes)
+            self.assertLessEqual(route.finish_minutes, planner.settings.end_minutes)
+            self.assertGreater(route.travel_minutes, 0)
+
+    def test_real_matrix_travel_time_moves_clock(self):
+        cache = json.loads((ROOT / "data" / "matrix_cache.json").read_text(encoding="utf-8-sig"))
+        planner = RoutePlanner(PlannerSettings(), travel_provider=MatrixTravelProvider(cache))
+        data = load_problem(ROOT / "data" / "logistics_data.json")
+        result = planner.build(data, available_vehicles=16)
+
+        route = max(result.routes, key=lambda item: len(item.stops))
+        visits = route.stops
+        self.assertGreaterEqual(len(visits), 2)
+        for previous, following in zip(visits, visits[1:]):
+            self.assertGreater(following.travel_minutes, 0)
+            self.assertGreaterEqual(
+                following.arrival_minutes,
+                previous.service_end_minutes + following.travel_minutes,
+            )
+
+    def test_partial_delivery_has_no_false_weight_warning(self):
+        """При честной частичной доставке не должно быть предупреждения о сумме груза."""
+        data = {
+            "depot": {"address": "Склад"},
+            "vehicles": [{"id": "van_1t", "capacity": 1000, "count": 1}],
+            "delivery_points": [
+                {"id": "p1", "name": "Магазин", "address": "Улица 1", "demand": 1200},
+                {"id": "p2", "name": "Магазин 2", "address": "Улица 2", "demand": 400, "priority": True},
+            ],
+            "constraints": {"min_load_ratio": 0.9, "max_workday_hours": 8, "unload_time_minutes": 30},
+        }
+        result = self.planner.build(data)
+        self.assertTrue(result.unassigned_stops)
+        self.assertFalse(any("Сумма назначенного груза" in warning for warning in result.warnings))
+
+    # Парк 2×(5 т), груза 8 000 кг: вторая машина набирает только 3 000 кг (60%).
+    UNDERLOADED = {
+        "depot": {"address": "Склад"},
+        "vehicles": [{"id": "truck_5t", "capacity": 5000, "count": 2}],
+        "delivery_points": [
+            *[
+                {"id": f"big{i}", "name": "Магазин", "address": f"Большая {i}", "demand": 1000}
+                for i in range(1, 6)
+            ],
+            *[
+                {"id": f"small{i}", "name": "Магазин", "address": f"Малая {i}", "demand": 500}
+                for i in range(1, 7)
+            ],
+        ],
+        "constraints": {"min_load_ratio": 0.9, "max_workday_hours": 8, "unload_time_minutes": 30},
+    }
+
+    def test_enforce_min_load_removes_underloaded_route(self):
+        """Правило 90%: машина с загрузкой 60% не выезжает, её груз — в «не развезено»."""
+        soft = self.planner.build(self.UNDERLOADED)
+        underloaded = [route for route in soft.routes if route.utilization < 0.9]
+        self.assertTrue(underloaded, "ожидается рейс ниже 90%")
+
+        strict_planner = RoutePlanner(
+            PlannerSettings(default_drive_minutes=5, enforce_min_load=True)
+        )
+        strict = strict_planner.build(self.UNDERLOADED)
+        self.assertTrue(strict.routes)
+        self.assertTrue(all(route.utilization >= 0.9 for route in strict.routes))
+        self.assertGreater(strict.unassigned_weight_kg, 0)
+        self.assertEqual(
+            strict.assigned_demand_kg + strict.unassigned_weight_kg,
+            8000,
+        )
 
 
 if __name__ == "__main__":

@@ -258,3 +258,52 @@ def improve_route_order(
         if not improved:
             break
     return best
+
+
+def improve_route_order_2opt(
+    ordered: list[DeliveryStop],
+    depot_key: str,
+    travel: TravelTimeProvider,
+    start_minutes: int,
+    loading_minutes: int,
+    service_minutes: int = 30,
+    max_passes: int = 8,
+    lunch_start_minutes: int | None = None,
+    lunch_minutes: int = 0,
+) -> list[DeliveryStop]:
+    """2-opt: разворачивает участок маршрута, если возврат на базу становится раньше.
+
+    Дополняет or-opt: тот переставляет отдельную точку, а 2-opt убирает
+    «крестовые» перегоны, которые перестановкой одной точки не лечатся.
+    """
+    best = list(ordered)
+    if len(best) < 3:
+        return best
+
+    def finish_cost(sequence: list[DeliveryStop]) -> int:
+        return route_finish_minutes(
+            sequence,
+            depot_key,
+            travel,
+            start_minutes,
+            loading_minutes,
+            service_minutes,
+            lunch_start_minutes,
+            lunch_minutes,
+        )
+
+    best_total = finish_cost(best)
+    for _ in range(max_passes):
+        improved = False
+        for start in range(len(best) - 1):
+            for end in range(start + 1, len(best)):
+                if end - start < 1:
+                    continue
+                candidate = best[:start] + list(reversed(best[start:end + 1])) + best[end + 1:]
+                total = finish_cost(candidate)
+                if total < best_total:
+                    best, best_total = candidate, total
+                    improved = True
+        if not improved:
+            break
+    return best

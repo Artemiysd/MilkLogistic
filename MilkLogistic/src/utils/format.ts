@@ -18,3 +18,12 @@ export function formatMinutes(minutes?: number | null): string {
     const total = Math.round(minutes);
     return `${Math.floor(total / 60)} ч ${String(total % 60).padStart(2, "0")} мин`;
 }
+
+/** Русские склонения: plural(3, "рейс", "рейса", "рейсов") -> "рейса" */
+export function plural(count: number, one: string, few: string, many: string): string {
+    const mod10 = Math.abs(count) % 10;
+    const mod100 = Math.abs(count) % 100;
+    if (mod10 === 1 && mod100 !== 11) return one;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+    return many;
+}

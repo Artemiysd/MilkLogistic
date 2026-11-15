@@ -1,0 +1,371 @@
+.dispatch-page {
+    min-height: 100vh;
+    background: #f5f7f6;
+    color: #1f2933;
+    font-family: Arial, sans-serif;
+    padding: 24px 32px 48px;
+    box-sizing: border-box;
+}
+
+.dispatch-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.dispatch-header h1 {
+    margin: 0;
+    color: #1d4ed8;
+    font-size: 26px;
+}
+
+.dispatch-header p {
+    margin: 6px 0 0;
+    color: #4b5563;
+}
+
+.dispatch-header-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.dispatch-danger {
+    padding: 10px 14px;
+    border-radius: 9px;
+    border: 1px solid #fecaca;
+    background: #fff1f2;
+    color: #b91c1c;
+    cursor: pointer;
+}
+
+.dispatch-danger:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.dispatch-guide {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    padding: 18px;
+    margin-bottom: 18px;
+}
+
+.dispatch-guide h2 {
+    margin: 0 0 10px;
+    font-size: 18px;
+    color: #1d4ed8;
+}
+
+.dispatch-guide ol {
+    margin: 0 0 14px 20px;
+    padding: 0;
+    color: #1e3a8a;
+    line-height: 1.6;
+}
+
+.dispatch-guide-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.dispatch-primary {
+    padding: 11px 16px;
+    border-radius: 9px;
+    border: 1px solid #2563eb;
+    background: #2563eb;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.dispatch-primary:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.dispatch-ghost {
+    padding: 11px 16px;
+    border-radius: 9px;
+    border: 1px solid #93c5fd;
+    background: white;
+    color: #1d4ed8;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.dispatch-link {
+    color: #1d4ed8;
+    text-decoration: none;
+    background: white;
+    padding: 10px 14px;
+    border-radius: 9px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.dispatch-alert {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1e3a8a;
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+}
+
+.dispatch-alert.error {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #b91c1c;
+}
+
+.dispatch-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.dispatch-stats div {
+    background: white;
+    border-radius: 12px;
+    padding: 14px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.dispatch-stats strong {
+    display: block;
+    font-size: 26px;
+    color: #1d4ed8;
+}
+
+.dispatch-stats span {
+    font-size: 13px;
+    color: #6b7280;
+}
+
+.dispatch-panel {
+    background: white;
+    border-radius: 12px;
+    padding: 18px;
+    margin-bottom: 18px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.dispatch-panel h2 {
+    margin: 0 0 12px;
+    font-size: 18px;
+    color: #1d4ed8;
+}
+
+.dispatch-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.dispatch-form input {
+    flex: 1 1 160px;
+    padding: 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 9px;
+    font-size: 14px;
+}
+
+.dispatch-form button,
+.dispatch-card-actions button,
+.dispatch-table button {
+    padding: 10px 14px;
+    border-radius: 9px;
+    border: 1px solid #2563eb;
+    background: #2563eb;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.dispatch-form button.ghost {
+    background: white;
+    color: #1d4ed8;
+}
+
+.dispatch-form button:disabled,
+.dispatch-card-actions button:disabled,
+.dispatch-table button:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.dispatch-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 14px;
+    font-size: 14px;
+}
+
+.dispatch-table th {
+    text-align: left;
+    color: #6b7280;
+    font-weight: normal;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 8px 6px;
+}
+
+.dispatch-table td {
+    padding: 9px 6px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+}
+
+.dispatch-link-cell {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.dispatch-link-cell a {
+    color: #1d4ed8;
+}
+
+.dispatch-link-cell button,
+.dispatch-table button.danger {
+    background: white;
+    color: #1d4ed8;
+    border-color: #d1d5db;
+    padding: 6px 10px;
+    font-size: 13px;
+}
+
+.dispatch-table button.danger {
+    color: #b91c1c;
+    border-color: #fecdd3;
+}
+
+.dispatch-assignments {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 12px;
+}
+
+.dispatch-card {
+    border: 1px solid #eef2f7;
+    border-radius: 12px;
+    padding: 14px;
+}
+
+.dispatch-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.dispatch-card-head p {
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: #6b7280;
+}
+
+.dispatch-status {
+    align-self: flex-start;
+    padding: 5px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    background: #e5edff;
+    color: #1d4ed8;
+    white-space: nowrap;
+}
+
+.dispatch-status-completed {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.dispatch-status-problem {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.dispatch-progress {
+    height: 8px;
+    background: #e5e7eb;
+    border-radius: 999px;
+    overflow: hidden;
+    margin: 12px 0 6px;
+}
+
+.dispatch-progress div {
+    height: 100%;
+    background: #22c55e;
+}
+
+.dispatch-progress-text {
+    margin: 0;
+    font-size: 13px;
+    color: #6b7280;
+}
+
+.dispatch-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.dispatch-open {
+    padding: 10px 14px;
+    border-radius: 9px;
+    background: #16a34a;
+    color: white;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.dispatch-card-actions button {
+    background: white;
+    color: #1d4ed8;
+    border-color: #d1d5db;
+}
+
+.dispatch-card-actions button.danger {
+    color: #b91c1c;
+    border-color: #fecdd3;
+}
+
+.dispatch-empty {
+    color: #6b7280;
+    margin: 0;
+}
+
+.dispatch-hint {
+    margin: 10px 0 0;
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.dispatch-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: #4b5563;
+}
+
+@media (max-width: 720px) {
+    .dispatch-page {
+        padding: 16px 14px 36px;
+    }
+
+    .dispatch-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .dispatch-header {
+        flex-direction: column;
+    }
+}

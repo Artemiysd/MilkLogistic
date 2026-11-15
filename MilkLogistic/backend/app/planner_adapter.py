@@ -96,18 +96,30 @@ def expand_vehicles(vehicle_types: list[dict]) -> list[dict]:
     return vehicles
 
 
-def baseline_distance_m(cache: dict) -> float:
-    """Пробег, если ехать в порядке накладной: склад -> точка 1 -> ... -> склад."""
-    distance = cache["distance_m"]
-    size = int(cache["size"])
-    if size < 2:
+def baseline_distance_m(data: dict, travel) -> float:
+    """Пробег «как в накладной»: склад -> адреса по порядку -> склад.
+
+    Считаем тем же провайдером, что и план: для известных адресов это
+    дорожные километры OSRM, для неизвестных — честная запасная оценка.
+    Дубли адресов сохраняются: это отдельные заявки в порядке накладной.
+    """
+    depot = str(data.get("depot", {}).get("address", ""))
+    addresses = [
+        normalize_address(point.get("address", ""))
+        for point in data.get("delivery_points", [])
+        if normalize_address(point.get("address", ""))
+    ]
+    if not addresses:
         return 0.0
-    total = sum(distance[i][i + 1] for i in range(size - 1))
-    total += distance[size - 1][0]
-    return round(total, 1)
+
+    total = travel.km(depot, addresses[0]) if depot else 0.0
+    for first, second in zip(addresses, addresses[1:]):
+        total += travel.km(first, second)
+    total += travel.km(addresses[-1], depot) if depot else 0.0
+    return round(total * 1000.0, 1)
 
 
-def _route_to_dict(route, index: int) -> dict:
+def _route_to_dict(route, index: int, min_ratio: float = 0.9) -> dict:
     stops = []
     for sequence, visit in enumerate(route.stops, start=1):
         stop = visit.stop
@@ -135,6 +147,7 @@ def _route_to_dict(route, index: int) -> dict:
                 "coords": _coords_of(stop.points),
             }
         )
+    min_load_kg = int(round(route.vehicle.capacity_kg * min_ratio))
     return {
         "route_number": index,
         "vehicle_id": route.vehicle.vehicle_id,
@@ -144,6 +157,8 @@ def _route_to_dict(route, index: int) -> dict:
         "trip_no": route.trip_no,
         "load_kg": route.load_kg,
         "load_ratio": round(route.utilization, 4),
+        "min_load_kg": min_load_kg,
+        "underloaded": bool(min_ratio > 0 and route.load_kg < min_load_kg),
         "distance_m": round(route.total_km * 1000, 1),
         "work_minutes": route.working_minutes,
         "end_time": format_clock(route.finish_minutes),
@@ -340,10 +355,14 @@ def run_plan(
     loading_minutes: int = 30,
     routing_url: str | None = None,
     include_geometry: bool = True,
+    enforce_min_load: bool = False,
 ) -> dict:
     """Запускает планировщик Даника на реальной матрице и возвращает ответ API."""
     started = time.monotonic()
-    constraints = data.get("constraints", {})
+    constraints = dict(data.get("constraints", {}))
+    if enforce_min_load:
+        constraints["enforce_min_load"] = True
+        data = {**data, "constraints": constraints}
     provider = MatrixTravelProvider(cache)
 
     settings = PlannerSettings(
@@ -359,11 +378,14 @@ def run_plan(
 
     max_workday_minutes = int(round(settings.max_workday_hours * 60))
     shift_end_minutes = settings.end_minutes
-    routes = [_route_to_dict(route, index) for index, route in enumerate(result.routes, start=1)]
+    routes = [
+        _route_to_dict(route, index, settings.min_load_ratio)
+        for index, route in enumerate(result.routes, start=1)
+    ]
     unassigned_stops = _true_unassigned_stops(data, result)
 
     distance_m = round(sum(route["distance_m"] for route in routes), 1)
-    baseline_m = baseline_distance_m(cache)
+    baseline_m = baseline_distance_m(data, provider)
     demand_kg = result.total_demand_kg
     unassigned_kg = round(sum(stop.demand_kg for stop in unassigned_stops), 1)
     assigned_kg = round(demand_kg - unassigned_kg, 1)
@@ -401,6 +423,7 @@ def run_plan(
             "unload_minutes": settings.unloading_minutes,
             "loading_minutes": settings.loading_minutes,
             "min_load_ratio": settings.min_load_ratio,
+            "enforce_min_load": enforce_min_load,
             "max_workday_hours": settings.max_workday_hours,
             "matrix_provider": provider.provider,
             "matrix_built_at": provider.built_at,
@@ -408,6 +431,14 @@ def run_plan(
             "routing_url": routing_url or os.environ.get("ROUTING_URL"),
         },
         "routes": routes,
+        "review": {
+            "min_load_ratio": settings.min_load_ratio,
+            "underloaded_routes": [
+                route["route_number"] for route in routes if route.get("underloaded")
+            ],
+            "underloaded_count": sum(1 for route in routes if route.get("underloaded")),
+            "needs_decision": any(route.get("underloaded") for route in routes),
+        },
         "totals": {
             "distance_m": distance_m,
             "vehicles_used": len(routes),

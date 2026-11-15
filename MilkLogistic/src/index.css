@@ -109,3 +109,40 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+.fatal {
+  max-width: 640px;
+  margin: 60px auto;
+  padding: 24px;
+  background: #fff;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  font-family: Arial, sans-serif;
+  color: #1f2933;
+}
+.fatal h1 {
+  margin: 0 0 12px;
+  color: #b91c1c;
+  font-size: 24px;
+}
+.fatal p {
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+.fatal-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 16px;
+}
+.fatal-actions button {
+  padding: 11px 16px;
+  border-radius: 9px;
+  border: none;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+}
+.fatal-actions a {
+  color: #1d4ed8;
+}
