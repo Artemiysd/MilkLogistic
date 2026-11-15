@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "electron:start": "npm run build && electron .",
     "electron:dir": "npm run build && electron-builder --dir",
-    "electron:build": "npm run build && electron-builder --win"
+    "electron:build": "npm run build && electron-builder --win",
+    "electron:build:mac": "npm run build && electron-builder --mac"
   },
   "build": {
     "appId": "by.grsu.milklogistic",
@@ -36,6 +37,21 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "shortcutName": "MilkLogistic"
+    },
+    "mac": {
+      "category": "public.app-category.business",
+      "identity": null,
+      "hardenedRuntime": false,
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
+        }
+      ]
     }
   },
   "dependencies": {

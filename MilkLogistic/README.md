@@ -230,6 +230,34 @@ npm run electron:build   # установщик и portable: release/
 { "apiBase": "http://localhost:8080" }
 ```
 
+### macOS
+
+```bash
+cd MilkLogistic
+npm install
+npm run electron:build:mac   # release/*.dmg и *.zip (x64 + arm64)
+```
+
+Сборка не подписана (сертификата Apple нет). Первый запуск: правый клик по
+`MilkLogistic.app` → **Открыть**, либо снять карантин:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/MilkLogistic.app
+```
+
+Стек на Mac:
+
+```bash
+./start.sh
+```
+
+Для Apple Silicon Docker запускает OSRM через Rosetta (`platform: linux/amd64`
+в compose) — в Docker Desktop должно быть включено **Use Rosetta for x86_64/amd64 emulation**.
+
+Готовые сборки обеих платформ можно получить и без локального Mac:
+GitHub → **Actions → Build desktop apps → Run workflow** → скачать артефакт
+`MilkLogistic-macos` (или `MilkLogistic-windows`) из завершённого запуска.
+
 ## GitHub Pages
 
 Веб-версия публикуется автоматически: [`.github/workflows/pages.yml`](../.github/workflows/pages.yml)

@@ -59,6 +59,18 @@ Electron поднимает локальный сервер для `dist/` и о
 { "apiBase": "http://localhost:8000" }
 ```
 
+macOS:
+
+```bash
+npm install
+npm run electron:build:mac   # release/*.dmg + *.zip (x64 и arm64)
+```
+
+Сборка без подписи: при первом запуске правый клик → «Открыть» или
+`xattr -dr com.apple.quarantine /Applications/MilkLogistic.app`.
+Готовые артефакты для Mac и Windows собирает workflow
+`.github/workflows/desktop.yml` (Actions → Build desktop apps → Run workflow).
+
 ### 2.2 Онлайн-версия (GitHub Pages)
 
 https://artemiysd.github.io/MilkLogistic/ — собирается workflow при пуше в `develop`/`main`
