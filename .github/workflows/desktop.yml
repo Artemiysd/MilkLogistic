@@ -38,7 +38,21 @@ jobs:
       - name: Build desktop app
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npm run ${{ matrix.script }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run ${{ matrix.script }} 2>&1 | tee build.log
+
+      - name: Show build error in annotations
+        if: failure()
+        shell: bash
+        run: |
+          if [ -f build.log ]; then
+            tail -n 12 build.log | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
