@@ -1,0 +1,82 @@
+﻿{
+    "meta":  {
+                 "date":  "2026-11-16",
+                 "document_number":  "1C-DEMO-002",
+                 "source":  "1c",
+                 "comment":  "Маленькая выгрузка: 4 точки, 2 машины"
+             },
+    "depot":  {
+                  "id":  "depot_1",
+                  "address":  "Гродно, Гаспадарчая 28",
+                  "coords":  {
+                                 "lat":  53.708928,
+                                 "lon":  23.828288
+                             }
+              },
+    "vehicles":  [
+                     {
+                         "id":  "truck_2_8t",
+                         "name":  "2.8 т",
+                         "capacity":  2800,
+                         "count":  2
+                     }
+                 ],
+    "delivery_points":  [
+                            {
+                                "id":  "1c-point_1",
+                                "name":  "ст 64",
+                                "address":  "проспект Космонавтов 100",
+                                "street":  "Космонавтов",
+                                "demand":  1840,
+                                "coords":  {
+                                               "lat":  53.6753356,
+                                               "lon":  23.9116412
+                                           }
+                            },
+                            {
+                                "id":  "1c-point_4",
+                                "name":  "в/ч 2141",
+                                "address":  "Белуша 1",
+                                "street":  "Белуша",
+                                "demand":  150,
+                                "coords":  {
+                                               "lat":  53.671824,
+                                               "lon":  23.8446836
+                                           }
+                            },
+                            {
+                                "id":  "1c-point_5",
+                                "name":  "ГУ \"Гродненский областной центр гигиены, эпидемиологии и общественного здоровья\"",
+                                "address":  "проспект Космонавтов 58",
+                                "street":  "Космонавтов",
+                                "demand":  120,
+                                "coords":  {
+                                               "lat":  53.674965,
+                                               "lon":  23.8643319
+                                           }
+                            },
+                            {
+                                "id":  "1c-point_6",
+                                "name":  "ЛенПродуктСервис (Карского) Спутник",
+                                "address":  "Карского 2г",
+                                "street":  "Карского",
+                                "demand":  1200,
+                                "coords":  {
+                                               "lat":  53.6844167,
+                                               "lon":  23.8804412
+                                           }
+                            }
+                        ],
+    "constraints":  {
+                        "min_load_ratio":  0.9,
+                        "max_workday_hours":  8,
+                        "one_trip_per_vehicle":  true,
+                        "unload_time_minutes":  30,
+                        "restricted_streets":  [
+                                                   "Советская",
+                                                   "Мостовая",
+                                                   "Замковая"
+                                               ],
+                        "restricted_vehicle_capacity":  1500
+                    }
+}
